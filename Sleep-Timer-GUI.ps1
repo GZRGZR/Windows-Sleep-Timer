@@ -140,7 +140,7 @@ public static class SleepTimerPower {
     $script:settingsPanel.Controls.Add($rule)
 
     $script:topCheck = New-Object System.Windows.Forms.CheckBox
-    $script:topCheck.Text = "הצג חלון מעל שאר החלונות ב-30 השניות האחרונות"
+    $script:topCheck.Text = "הצג חלון מעל שאר החלונות רק ב-20 השניות האחרונות"
     $script:topCheck.Location = New-Object System.Drawing.Point(20, 167)
     $script:topCheck.Size = New-Object System.Drawing.Size(410, 25)
     $script:topCheck.Checked = $true
@@ -237,22 +237,27 @@ public static class SleepTimerPower {
             $script:remainingSeconds = $left
             $script:countLabel.Text = Format-Remaining $left
 
-            if ($left -le 30) {
-                if ($script:topCheck.Checked -and -not $script:form.TopMost) {
+            # Bring the compact countdown window forward only during the final 20 seconds.
+            if ($left -le 20 -and $script:topCheck.Checked) {
+                if (-not $script:form.TopMost) {
                     $script:form.TopMost = $true
                     $script:form.BringToFront()
                     $script:form.Activate()
                 }
+            }
+            elseif ($script:form.TopMost) {
+                $script:form.TopMost = $false
+            }
 
+            # The sound alert remains independent and plays at 30 seconds.
+            if ($left -le 30) {
                 if ($script:soundCheck.Checked -and -not $script:alertPlayed) {
                     $script:alertPlayed = $true
                     try { [System.Media.SystemSounds]::Exclamation.Play() } catch {}
                 }
                 $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(190, 70, 45)
             }
-
-            if ($left -gt 30 -and $script:form.TopMost) {
-                $script:form.TopMost = $false
+            else {
                 $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
             }
 
@@ -268,6 +273,12 @@ public static class SleepTimerPower {
                     $winError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
                     throw "Windows לא הצליח להיכנס למצב שינה. קוד שגיאה: $winError"
                 }
+
+                # SetSuspendState returns after Windows wakes up again.
+                # Close the timer immediately so it is not left open after wake.
+                $script:status.Text = "המחשב התעורר; התוכנה נסגרת."
+                $script:form.Close()
+                return
             }
         }
         catch {
@@ -298,6 +309,31 @@ public static class SleepTimerPower {
             $script:countLabel.Text = Format-Remaining $seconds
             $script:settingsPanel.Visible = $false
             $script:countdownPanel.Visible = $true
+
+            # Switch to a small compact timer window instead of keeping the large settings window.
+            $script:form.MinimumSize = New-Object System.Drawing.Size(370, 205)
+            $script:form.MaximumSize = New-Object System.Drawing.Size(370, 205)
+            $script:form.Size = New-Object System.Drawing.Size(370, 205)
+            $header.Visible = $false
+            $script:status.Visible = $false
+            $script:countdownPanel.Location = New-Object System.Drawing.Point(8, 8)
+            $script:countdownPanel.Size = New-Object System.Drawing.Size(338, 148)
+            $countTitle.Location = New-Object System.Drawing.Point(10, 6)
+            $countTitle.Size = New-Object System.Drawing.Size(314, 24)
+            $countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+            $script:countLabel.Location = New-Object System.Drawing.Point(10, 30)
+            $script:countLabel.Size = New-Object System.Drawing.Size(314, 52)
+            $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 26, [System.Drawing.FontStyle]::Bold)
+            $script:addButton.Location = New-Object System.Drawing.Point(174, 93)
+            $script:addButton.Size = New-Object System.Drawing.Size(140, 35)
+            $script:cancelButton.Location = New-Object System.Drawing.Point(18, 93)
+            $script:cancelButton.Size = New-Object System.Drawing.Size(140, 35)
+
+            $screenArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+            $script:form.Location = New-Object System.Drawing.Point(
+                ($screenArea.Left + [int](($screenArea.Width - $script:form.Width) / 2)),
+                ($screenArea.Top + [int](($screenArea.Height - $script:form.Height) / 2))
+            )
             $script:status.Text = "הטיימר פועל. אפשר להוסיף 20 שניות או לבטל."
             $script:clock.Start()
         }
@@ -329,6 +365,26 @@ public static class SleepTimerPower {
         $script:form.TopMost = $false
         $script:countdownPanel.Visible = $false
         $script:settingsPanel.Visible = $true
+
+        # Restore the full settings window after cancellation.
+        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 470)
+        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 470)
+        $script:form.Size = New-Object System.Drawing.Size(510, 470)
+        $header.Visible = $true
+        $script:status.Visible = $true
+        $script:countdownPanel.Location = New-Object System.Drawing.Point(24, 98)
+        $script:countdownPanel.Size = New-Object System.Drawing.Size(450, 305)
+        $countTitle.Location = New-Object System.Drawing.Point(20, 28)
+        $countTitle.Size = New-Object System.Drawing.Size(406, 35)
+        $countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $script:countLabel.Location = New-Object System.Drawing.Point(20, 72)
+        $script:countLabel.Size = New-Object System.Drawing.Size(406, 90)
+        $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 34, [System.Drawing.FontStyle]::Bold)
+        $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
+        $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
+        $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
+        $script:cancelButton.Size = New-Object System.Drawing.Size(165, 42)
+
         $script:status.Text = "הטיימר בוטל. המחשב לא ייכנס למצב שינה."
     })
 
