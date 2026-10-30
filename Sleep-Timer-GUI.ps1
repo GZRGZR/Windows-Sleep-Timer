@@ -59,6 +59,9 @@ public static class SleepTimerPower {
     $script:alertPlayed = $false
     $script:deadlineUtc = [DateTime]::UtcNow
     $script:remainingSeconds = 0
+    $script:initialDurationSeconds = 0
+    $script:extensionCount = 0
+    $script:latePhase = $false
 
     # Main window
     $script:form = New-Object System.Windows.Forms.Form
@@ -200,6 +203,15 @@ public static class SleepTimerPower {
     $script:countLabel.RightToLeft = [System.Windows.Forms.RightToLeft]::No
     $script:countdownPanel.Controls.Add($script:countLabel)
 
+    $script:detailsLabel = New-Object System.Windows.Forms.Label
+    $script:detailsLabel.Text = "משך התחלתי: 00:00  |  הארכות: 0"
+    $script:detailsLabel.Location = New-Object System.Drawing.Point(20, 164)
+    $script:detailsLabel.Size = New-Object System.Drawing.Size(406, 24)
+    $script:detailsLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $script:detailsLabel.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
+    $script:detailsLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:countdownPanel.Controls.Add($script:detailsLabel)
+
     $script:addButton = New-Object System.Windows.Forms.Button
     $script:addButton.Text = "הוסף 20 שניות"
     $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
@@ -225,6 +237,11 @@ public static class SleepTimerPower {
     $script:status.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $script:form.Controls.Add($script:status)
 
+    function script:Update-DetailsLabel {
+        $initialText = Format-Remaining $script:initialDurationSeconds
+        $script:detailsLabel.Text = "משך התחלתי: $initialText  |  הארכות: $script:extensionCount"
+    }
+
     $script:clock = New-Object System.Windows.Forms.Timer
     $script:clock.Interval = 200
 
@@ -237,15 +254,24 @@ public static class SleepTimerPower {
             $script:remainingSeconds = $left
             $script:countLabel.Text = Format-Remaining $left
 
-            # Bring the compact countdown window forward only during the final 20 seconds.
-            if ($left -le 20 -and $script:topCheck.Checked) {
-                if (-not $script:form.TopMost) {
+            # Enter the end phase once the original/extended timer reaches 20 seconds.
+            if (-not $script:latePhase -and $left -le 20) {
+                $script:latePhase = $true
+            }
+
+            if ($script:latePhase) {
+                # After the end phase begins, one extension may raise the remaining time
+                # to at most 40 seconds. The next extension is enabled only at <=20 seconds.
+                $script:addButton.Enabled = ($left -le 20)
+                if ($script:topCheck.Checked) {
                     $script:form.TopMost = $true
-                    $script:form.BringToFront()
-                    $script:form.Activate()
+                }
+                else {
+                    $script:form.TopMost = $false
                 }
             }
-            elseif ($script:form.TopMost) {
+            else {
+                $script:addButton.Enabled = $true
                 $script:form.TopMost = $false
             }
 
@@ -318,9 +344,14 @@ public static class SleepTimerPower {
         try {
             $seconds = Convert-TimeInput $script:timeBox.Text
             $script:remainingSeconds = $seconds
+            $script:initialDurationSeconds = $seconds
+            $script:extensionCount = 0
+            $script:latePhase = $false
             $script:deadlineUtc = [DateTime]::UtcNow.AddSeconds($seconds)
             $script:alertPlayed = $false
             $script:timerRunning = $true
+            $script:addButton.Enabled = $true
+            Update-DetailsLabel
             $script:form.TopMost = $false
             $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
             $script:countLabel.Text = Format-Remaining $seconds
@@ -328,9 +359,9 @@ public static class SleepTimerPower {
             $script:countdownPanel.Visible = $true
 
             # Switch to a small compact timer window instead of keeping the large settings window.
-            $script:form.MinimumSize = New-Object System.Drawing.Size(370, 205)
-            $script:form.MaximumSize = New-Object System.Drawing.Size(370, 205)
-            $script:form.Size = New-Object System.Drawing.Size(370, 205)
+            $script:form.MinimumSize = New-Object System.Drawing.Size(390, 240)
+            $script:form.MaximumSize = New-Object System.Drawing.Size(390, 240)
+            $script:form.Size = New-Object System.Drawing.Size(390, 240)
             $screenArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
             $smallX = $screenArea.Left + [int](($screenArea.Width - $script:form.Width) / 2)
             $smallY = $screenArea.Top + [int](($screenArea.Height - $script:form.Height) / 2)
@@ -338,17 +369,19 @@ public static class SleepTimerPower {
             $script:header.Visible = $false
             $script:status.Visible = $false
             $script:countdownPanel.Location = New-Object System.Drawing.Point(8, 8)
-            $script:countdownPanel.Size = New-Object System.Drawing.Size(338, 148)
-            $script:countTitle.Location = New-Object System.Drawing.Point(10, 6)
-            $script:countTitle.Size = New-Object System.Drawing.Size(314, 24)
+            $script:countdownPanel.Size = New-Object System.Drawing.Size(358, 185)
+            $script:countTitle.Location = New-Object System.Drawing.Point(10, 5)
+            $script:countTitle.Size = New-Object System.Drawing.Size(334, 24)
             $script:countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-            $script:countLabel.Location = New-Object System.Drawing.Point(10, 30)
-            $script:countLabel.Size = New-Object System.Drawing.Size(314, 52)
-            $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 26, [System.Drawing.FontStyle]::Bold)
-            $script:addButton.Location = New-Object System.Drawing.Point(174, 93)
-            $script:addButton.Size = New-Object System.Drawing.Size(140, 35)
-            $script:cancelButton.Location = New-Object System.Drawing.Point(18, 93)
-            $script:cancelButton.Size = New-Object System.Drawing.Size(140, 35)
+            $script:countLabel.Location = New-Object System.Drawing.Point(10, 29)
+            $script:countLabel.Size = New-Object System.Drawing.Size(334, 48)
+            $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 25, [System.Drawing.FontStyle]::Bold)
+            $script:detailsLabel.Location = New-Object System.Drawing.Point(10, 78)
+            $script:detailsLabel.Size = New-Object System.Drawing.Size(334, 24)
+            $script:addButton.Location = New-Object System.Drawing.Point(184, 112)
+            $script:addButton.Size = New-Object System.Drawing.Size(150, 35)
+            $script:cancelButton.Location = New-Object System.Drawing.Point(18, 112)
+            $script:cancelButton.Size = New-Object System.Drawing.Size(150, 35)
 
             $script:status.Text = "הטיימר פועל. אפשר להוסיף 20 שניות או לבטל."
             $script:clock.Start()
@@ -365,19 +398,38 @@ public static class SleepTimerPower {
 
     $script:addButton.Add_Click({
         if ($script:timerRunning) {
+            $leftNow = [int][math]::Ceiling(($script:deadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+
+            # In the end phase, require the remaining time to fall back to 20 seconds
+            # before another 20-second extension can be added.
+            if ($script:latePhase -and $leftNow -gt 20) {
+                $script:addButton.Enabled = $false
+                return
+            }
+
             $script:deadlineUtc = $script:deadlineUtc.AddSeconds(20)
+            $script:extensionCount++
             $script:alertPlayed = $false
-            $script:form.TopMost = $false
-            $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+            Update-DetailsLabel
+
             $left = [int][math]::Ceiling(($script:deadlineUtc - [DateTime]::UtcNow).TotalSeconds)
             $script:countLabel.Text = Format-Remaining $left
-            $script:status.Text = "נוספו 20 שניות."
+
+            if ($script:latePhase) {
+                $script:addButton.Enabled = $false
+                $script:status.Text = "נוספו 20 שניות. אפשר להוסיף שוב כשייוותרו 20 שניות."
+            }
+            else {
+                $script:status.Text = "נוספו 20 שניות."
+            }
         }
     })
 
     $script:cancelButton.Add_Click({
         $script:clock.Stop()
         $script:timerRunning = $false
+        $script:latePhase = $false
+        $script:addButton.Enabled = $true
         $script:form.TopMost = $false
         $script:form.MinimumSize = New-Object System.Drawing.Size(510, 470)
         $script:form.MaximumSize = New-Object System.Drawing.Size(510, 470)
@@ -394,6 +446,8 @@ public static class SleepTimerPower {
         $script:countLabel.Location = New-Object System.Drawing.Point(20, 72)
         $script:countLabel.Size = New-Object System.Drawing.Size(406, 90)
         $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 34, [System.Drawing.FontStyle]::Bold)
+        $script:detailsLabel.Location = New-Object System.Drawing.Point(20, 164)
+        $script:detailsLabel.Size = New-Object System.Drawing.Size(406, 24)
         $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
         $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
         $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
