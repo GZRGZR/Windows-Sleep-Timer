@@ -470,7 +470,6 @@ public static class SleepTimerPower {
         $script:detailsLabel.Size = New-Object System.Drawing.Size(406, 24)
         $script:limitLabel.Location = New-Object System.Drawing.Point(20, 238)
         $script:limitLabel.Size = New-Object System.Drawing.Size(406, 22)
-        $script:addButton.ToolTipText = "הוסף 20 שניות לטיימר."
         $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
         $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
         $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
