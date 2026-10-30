@@ -1,10 +1,11 @@
 ﻿$ErrorActionPreference = 'Stop'
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-[System.Windows.Forms.Application]::EnableVisualStyles()
+try {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    [System.Windows.Forms.Application]::EnableVisualStyles()
 
-Add-Type -TypeDefinition @'
+    Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class SleepTimerPower {
@@ -13,337 +14,342 @@ public static class SleepTimerPower {
 }
 '@
 
-function Convert-TimeInput([string]$text) {
-    $s = ($text.Trim() -replace ',', '.')
-    if ($s -notmatch '^\d+(\.\d+)?$') {
-        throw "יש להזין מספר בלבד, לדוגמה 10 או 3.4"
-    }
-
-    $parts = $s.Split('.')
-    $wholeMinutes = [int]$parts[0]
-    $extraSeconds = 0
-
-    if ($parts.Length -gt 1) {
-        $fraction = [double]::Parse("0.$($parts[1])", [Globalization.CultureInfo]::InvariantCulture)
-
-        # עד 0.59: הספרות אחרי הנקודה מייצגות שניות (3.4 = 40 שניות; 3.45 = 45).
-        # מעל 0.59: מפרשים את הסיומת כחלקי דקה (3.6 = 36 שניות; 3.75 = 45).
-        if ($fraction -le 0.59) {
-            $extraSeconds = [int][math]::Round($fraction * 100, [MidpointRounding]::AwayFromZero)
+    function Convert-TimeInput([string]$text) {
+        $s = ($text.Trim() -replace ',', '.')
+        if ($s -notmatch '^\d+(\.\d+)?$') {
+            throw "יש להזין מספר בלבד, לדוגמה 10 או 3.4"
         }
-        else {
-            $extraSeconds = [int][math]::Round($fraction * 60, [MidpointRounding]::AwayFromZero)
-        }
-    }
 
-    $totalSeconds = ($wholeMinutes * 60) + $extraSeconds
-    if ($totalSeconds -le 0 -or $totalSeconds -gt 86400) {
-        throw "יש לבחור זמן גדול מאפס ועד 24 שעות."
-    }
-    return [int]$totalSeconds
-}
+        $parts = $s.Split('.')
+        $wholeMinutes = [int]$parts[0]
+        $extraSeconds = 0
 
-function Format-Remaining([int]$seconds) {
-    $span = [TimeSpan]::FromSeconds([math]::Max(0, $seconds))
-    return ("{0:00}:{1:00}" -f [math]::Floor($span.TotalMinutes), $span.Seconds)
-}
+        if ($parts.Length -gt 1) {
+            $fraction = [double]::Parse("0.$($parts[1])", [Globalization.CultureInfo]::InvariantCulture)
 
-# חלון ההגדרות
-$form = New-Object System.Windows.Forms.Form
-$form.Text = "טיימר למצב שינה"
-$form.Size = New-Object System.Drawing.Size(500, 465)
-$form.MinimumSize = New-Object System.Drawing.Size(500, 465)
-$form.MaximumSize = New-Object System.Drawing.Size(500, 465)
-$form.StartPosition = "CenterScreen"
-$form.BackColor = [System.Drawing.Color]::FromArgb(246, 248, 252)
-$form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-$form.RightToLeft = [System.Windows.Forms.RightToLeft]::Yes
-$form.RightToLeftLayout = $true
-
-$header = New-Object System.Windows.Forms.Panel
-$header.Location = New-Object System.Drawing.Point(0, 0)
-$header.Size = New-Object System.Drawing.Size(500, 82)
-$header.BackColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
-$form.Controls.Add($header)
-
-$title = New-Object System.Windows.Forms.Label
-$title.Text = "טיימר למצב שינה"
-$title.ForeColor = [System.Drawing.Color]::White
-$title.Font = New-Object System.Drawing.Font("Segoe UI", 19, [System.Drawing.FontStyle]::Bold)
-$title.AutoSize = $true
-$title.Location = New-Object System.Drawing.Point(270, 12)
-$header.Controls.Add($title)
-
-$subtitle = New-Object System.Windows.Forms.Label
-$subtitle.Text = "קובעים זמן – ובסיומו המחשב נכנס למצב שינה"
-$subtitle.ForeColor = [System.Drawing.Color]::FromArgb(225, 235, 248)
-$subtitle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$subtitle.AutoSize = $true
-$subtitle.Location = New-Object System.Drawing.Point(145, 51)
-$header.Controls.Add($subtitle)
-
-$card = New-Object System.Windows.Forms.Panel
-$card.Location = New-Object System.Drawing.Point(24, 98)
-$card.Size = New-Object System.Drawing.Size(440, 305)
-$card.BackColor = [System.Drawing.Color]::White
-$card.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
-$form.Controls.Add($card)
-
-$prompt = New-Object System.Windows.Forms.Label
-$prompt.Text = "כמה זמן עד שהמחשב ייכנס למצב שינה?"
-$prompt.Location = New-Object System.Drawing.Point(22, 15)
-$prompt.Size = New-Object System.Drawing.Size(394, 28)
-$prompt.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-$prompt.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$card.Controls.Add($prompt)
-
-$timeBox = New-Object System.Windows.Forms.TextBox
-$timeBox.Location = New-Object System.Drawing.Point(40, 49)
-$timeBox.Size = New-Object System.Drawing.Size(356, 37)
-$timeBox.Font = New-Object System.Drawing.Font("Segoe UI", 16)
-$timeBox.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
-$timeBox.Text = "10"
-$timeBox.RightToLeft = [System.Windows.Forms.RightToLeft]::No
-$card.Controls.Add($timeBox)
-
-$examples = New-Object System.Windows.Forms.Label
-$examples.Text = "דוגמאות: 10 = עשר דקות     3.4 = 3:40     3.45 = 3:45"
-$examples.Location = New-Object System.Drawing.Point(12, 91)
-$examples.Size = New-Object System.Drawing.Size(414, 24)
-$examples.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
-$examples.ForeColor = [System.Drawing.Color]::FromArgb(75, 90, 110)
-$examples.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$card.Controls.Add($examples)
-
-$rule = New-Object System.Windows.Forms.Label
-$rule.Text = "חשוב: עד 3.59 הסיומת נחשבת לשניות (3.59 = 3:59)." + [Environment]::NewLine + "מ-3.6 ומעלה מחשבים כחלקי דקה: 3.6 = 3:36; 3.75 = 3:45."
-$rule.Location = New-Object System.Drawing.Point(12, 115)
-$rule.Size = New-Object System.Drawing.Size(414, 45)
-$rule.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
-$rule.ForeColor = [System.Drawing.Color]::FromArgb(75, 90, 110)
-$rule.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$card.Controls.Add($rule)
-
-$topCheck = New-Object System.Windows.Forms.CheckBox
-$topCheck.Text = "הצג חלון צף מעל שאר החלונות ב-30 השניות האחרונות"
-$topCheck.Location = New-Object System.Drawing.Point(20, 167)
-$topCheck.Size = New-Object System.Drawing.Size(405, 25)
-$topCheck.Checked = $true
-$topCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$card.Controls.Add($topCheck)
-
-$soundCheck = New-Object System.Windows.Forms.CheckBox
-$soundCheck.Text = "השמע צליל התראה 30 שניות לפני השינה"
-$soundCheck.Location = New-Object System.Drawing.Point(20, 196)
-$soundCheck.Size = New-Object System.Drawing.Size(405, 25)
-$soundCheck.Checked = $true
-$soundCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-$card.Controls.Add($soundCheck)
-
-$startButton = New-Object System.Windows.Forms.Button
-$startButton.Text = "התחל טיימר"
-$startButton.Location = New-Object System.Drawing.Point(230, 248)
-$startButton.Size = New-Object System.Drawing.Size(166, 34)
-$startButton.BackColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
-$startButton.ForeColor = [System.Drawing.Color]::White
-$startButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$startButton.FlatAppearance.BorderSize = 0
-$startButton.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-$card.Controls.Add($startButton)
-
-$closeButton = New-Object System.Windows.Forms.Button
-$closeButton.Text = "סגור"
-$closeButton.Location = New-Object System.Drawing.Point(40, 248)
-$closeButton.Size = New-Object System.Drawing.Size(166, 34)
-$closeButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$card.Controls.Add($closeButton)
-
-$status = New-Object System.Windows.Forms.Label
-$status.Text = "הטיימר עדיין לא הופעל."
-$status.Location = New-Object System.Drawing.Point(25, 410)
-$status.Size = New-Object System.Drawing.Size(440, 25)
-$status.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
-$status.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$form.Controls.Add($status)
-
-# חלון הספירה לאחור
-$countForm = New-Object System.Windows.Forms.Form
-$countForm.Text = "הטיימר פועל"
-$countForm.Size = New-Object System.Drawing.Size(410, 245)
-$countForm.MinimumSize = New-Object System.Drawing.Size(410, 245)
-$countForm.MaximumSize = New-Object System.Drawing.Size(410, 245)
-$countForm.StartPosition = "CenterScreen"
-$countForm.BackColor = [System.Drawing.Color]::FromArgb(246, 248, 252)
-$countForm.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-$countForm.RightToLeft = [System.Windows.Forms.RightToLeft]::Yes
-$countForm.RightToLeftLayout = $true
-$countForm.ShowInTaskbar = $true
-
-$countTitle = New-Object System.Windows.Forms.Label
-$countTitle.Text = "המחשב ייכנס למצב שינה בעוד"
-$countTitle.Location = New-Object System.Drawing.Point(20, 13)
-$countTitle.Size = New-Object System.Drawing.Size(355, 30)
-$countTitle.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-$countForm.Controls.Add($countTitle)
-
-$countLabel = New-Object System.Windows.Forms.Label
-$countLabel.Text = "00:00"
-$countLabel.Location = New-Object System.Drawing.Point(20, 47)
-$countLabel.Size = New-Object System.Drawing.Size(355, 72)
-$countLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 31, [System.Drawing.FontStyle]::Bold)
-$countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
-$countLabel.RightToLeft = [System.Windows.Forms.RightToLeft]::No
-$countForm.Controls.Add($countLabel)
-
-$addButton = New-Object System.Windows.Forms.Button
-$addButton.Text = "הוסף 20 שניות"
-$addButton.Location = New-Object System.Drawing.Point(195, 137)
-$addButton.Size = New-Object System.Drawing.Size(180, 39)
-$addButton.BackColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
-$addButton.ForeColor = [System.Drawing.Color]::White
-$addButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$addButton.FlatAppearance.BorderSize = 0
-$countForm.Controls.Add($addButton)
-
-$stopButton = New-Object System.Windows.Forms.Button
-$stopButton.Text = "בטל טיימר"
-$stopButton.Location = New-Object System.Drawing.Point(20, 137)
-$stopButton.Size = New-Object System.Drawing.Size(160, 39)
-$stopButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
-$countForm.Controls.Add($stopButton)
-
-$countNote = New-Object System.Windows.Forms.Label
-$countNote.Text = "כל לחיצה מוסיפה 20 שניות. אפשר לבטל בכל עת."
-$countNote.Location = New-Object System.Drawing.Point(15, 184)
-$countNote.Size = New-Object System.Drawing.Size(360, 24)
-$countNote.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
-$countNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 100, 115)
-$countNote.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-$countForm.Controls.Add($countNote)
-
-$script:remaining = 0
-$script:timerRunning = $false
-$script:alertPlayed = $false
-
-$clock = New-Object System.Windows.Forms.Timer
-$clock.Interval = 1000
-
-$clock.Add_Tick({
-    if (-not $script:timerRunning) { return }
-
-    $script:remaining--
-    if ($script:remaining -lt 0) { $script:remaining = 0 }
-    $countLabel.Text = Format-Remaining $script:remaining
-
-    if ($script:remaining -le 30) {
-        if ($topCheck.Checked) {
-            if ($countForm.WindowState -eq [System.Windows.Forms.FormWindowState]::Minimized) {
-                $countForm.WindowState = [System.Windows.Forms.FormWindowState]::Normal
+            # עד 0.59 כולל: הסיומת היא שניות (3.4 = 40 שניות; 3.59 = 59).
+            # מעל 0.59: הסיומת נחשבת חלקי דקה (3.6 = 36 שניות; 3.75 = 45).
+            if ($fraction -le 0.59) {
+                $extraSeconds = [int][math]::Round($fraction * 100, [MidpointRounding]::AwayFromZero)
             }
-            if (-not $countForm.TopMost) {
-                $countForm.TopMost = $true
-                $countForm.Show()
-                $countForm.BringToFront()
-                $countForm.Activate()
+            else {
+                $extraSeconds = [int][math]::Round($fraction * 60, [MidpointRounding]::AwayFromZero)
             }
         }
 
-        if ($soundCheck.Checked -and -not $script:alertPlayed) {
-            $script:alertPlayed = $true
-            try { [System.Media.SystemSounds]::Exclamation.Play() } catch {}
+        $totalSeconds = ($wholeMinutes * 60) + $extraSeconds
+        if ($totalSeconds -le 0 -or $totalSeconds -gt 86400) {
+            throw "יש לבחור זמן גדול מאפס ועד 24 שעות."
         }
-        $countLabel.ForeColor = [System.Drawing.Color]::FromArgb(190, 70, 45)
+        return [int]$totalSeconds
     }
 
-    if ($script:remaining -gt 30 -and $countForm.TopMost) {
-        $countForm.TopMost = $false
-        $countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+    function Format-Remaining([int]$seconds) {
+        $span = [TimeSpan]::FromSeconds([math]::Max(0, $seconds))
+        return ("{0:00}:{1:00}" -f [math]::Floor($span.TotalMinutes), $span.Seconds)
     }
 
-    if ($script:remaining -le 0) {
-        $clock.Stop()
-        $script:timerRunning = $false
-        $countForm.Hide()
-        $form.Hide()
+    # State and controls are script-scoped so the event callbacks always see them.
+    $script:timerRunning = $false
+    $script:alertPlayed = $false
+    $script:deadlineUtc = [DateTime]::UtcNow
+    $script:remainingSeconds = 0
+
+    # Main window
+    $script:form = New-Object System.Windows.Forms.Form
+    $script:form.Text = "טיימר למצב שינה"
+    $script:form.Size = New-Object System.Drawing.Size(510, 470)
+    $script:form.MinimumSize = New-Object System.Drawing.Size(510, 470)
+    $script:form.MaximumSize = New-Object System.Drawing.Size(510, 470)
+    $script:form.StartPosition = "CenterScreen"
+    $script:form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $script:form.MaximizeBox = $false
+    $script:form.BackColor = [System.Drawing.Color]::FromArgb(246, 248, 252)
+    $script:form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $script:form.RightToLeft = [System.Windows.Forms.RightToLeft]::Yes
+    $script:form.RightToLeftLayout = $true
+
+    $header = New-Object System.Windows.Forms.Panel
+    $header.Location = New-Object System.Drawing.Point(0, 0)
+    $header.Size = New-Object System.Drawing.Size(510, 82)
+    $header.BackColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+    $script:form.Controls.Add($header)
+
+    $title = New-Object System.Windows.Forms.Label
+    $title.Text = "טיימר למצב שינה"
+    $title.ForeColor = [System.Drawing.Color]::White
+    $title.Font = New-Object System.Drawing.Font("Segoe UI", 19, [System.Drawing.FontStyle]::Bold)
+    $title.AutoSize = $true
+    $title.Location = New-Object System.Drawing.Point(275, 12)
+    $header.Controls.Add($title)
+
+    $subtitle = New-Object System.Windows.Forms.Label
+    $subtitle.Text = "קובעים זמן – ובסיומו המחשב נכנס למצב שינה"
+    $subtitle.ForeColor = [System.Drawing.Color]::FromArgb(225, 235, 248)
+    $subtitle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $subtitle.AutoSize = $true
+    $subtitle.Location = New-Object System.Drawing.Point(145, 51)
+    $header.Controls.Add($subtitle)
+
+    # Settings view
+    $script:settingsPanel = New-Object System.Windows.Forms.Panel
+    $script:settingsPanel.Location = New-Object System.Drawing.Point(24, 98)
+    $script:settingsPanel.Size = New-Object System.Drawing.Size(450, 305)
+    $script:settingsPanel.BackColor = [System.Drawing.Color]::White
+    $script:settingsPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+    $script:form.Controls.Add($script:settingsPanel)
+
+    $prompt = New-Object System.Windows.Forms.Label
+    $prompt.Text = "כמה זמן עד שהמחשב ייכנס למצב שינה?"
+    $prompt.Location = New-Object System.Drawing.Point(22, 15)
+    $prompt.Size = New-Object System.Drawing.Size(404, 28)
+    $prompt.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+    $prompt.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:settingsPanel.Controls.Add($prompt)
+
+    $script:timeBox = New-Object System.Windows.Forms.TextBox
+    $script:timeBox.Location = New-Object System.Drawing.Point(40, 49)
+    $script:timeBox.Size = New-Object System.Drawing.Size(366, 37)
+    $script:timeBox.Font = New-Object System.Drawing.Font("Segoe UI", 16)
+    $script:timeBox.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
+    $script:timeBox.Text = "10"
+    $script:timeBox.RightToLeft = [System.Windows.Forms.RightToLeft]::No
+    $script:settingsPanel.Controls.Add($script:timeBox)
+
+    $examples = New-Object System.Windows.Forms.Label
+    $examples.Text = "דוגמאות: 10 = עשר דקות     3.4 = 3:40     3.45 = 3:45"
+    $examples.Location = New-Object System.Drawing.Point(12, 91)
+    $examples.Size = New-Object System.Drawing.Size(424, 24)
+    $examples.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+    $examples.ForeColor = [System.Drawing.Color]::FromArgb(75, 90, 110)
+    $examples.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:settingsPanel.Controls.Add($examples)
+
+    $rule = New-Object System.Windows.Forms.Label
+    $rule.Text = "עד 3.59 הסיומת נחשבת לשניות (3.59 = 3:59)." + [Environment]::NewLine + "מ-3.6 ומעלה מחשבים כחלקי דקה: 3.6 = 3:36; 3.75 = 3:45."
+    $rule.Location = New-Object System.Drawing.Point(12, 115)
+    $rule.Size = New-Object System.Drawing.Size(424, 45)
+    $rule.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+    $rule.ForeColor = [System.Drawing.Color]::FromArgb(75, 90, 110)
+    $rule.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:settingsPanel.Controls.Add($rule)
+
+    $script:topCheck = New-Object System.Windows.Forms.CheckBox
+    $script:topCheck.Text = "הצג חלון מעל שאר החלונות ב-30 השניות האחרונות"
+    $script:topCheck.Location = New-Object System.Drawing.Point(20, 167)
+    $script:topCheck.Size = New-Object System.Drawing.Size(410, 25)
+    $script:topCheck.Checked = $true
+    $script:topCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:settingsPanel.Controls.Add($script:topCheck)
+
+    $script:soundCheck = New-Object System.Windows.Forms.CheckBox
+    $script:soundCheck.Text = "השמע צליל התראה 30 שניות לפני השינה"
+    $script:soundCheck.Location = New-Object System.Drawing.Point(20, 196)
+    $script:soundCheck.Size = New-Object System.Drawing.Size(410, 25)
+    $script:soundCheck.Checked = $true
+    $script:soundCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:settingsPanel.Controls.Add($script:soundCheck)
+
+    $script:startButton = New-Object System.Windows.Forms.Button
+    $script:startButton.Text = "התחל טיימר"
+    $script:startButton.Location = New-Object System.Drawing.Point(230, 248)
+    $script:startButton.Size = New-Object System.Drawing.Size(176, 34)
+    $script:startButton.BackColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
+    $script:startButton.ForeColor = [System.Drawing.Color]::White
+    $script:startButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $script:startButton.FlatAppearance.BorderSize = 0
+    $script:startButton.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $script:settingsPanel.Controls.Add($script:startButton)
+
+    $closeButton = New-Object System.Windows.Forms.Button
+    $closeButton.Text = "סגור"
+    $closeButton.Location = New-Object System.Drawing.Point(40, 248)
+    $closeButton.Size = New-Object System.Drawing.Size(166, 34)
+    $closeButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $script:settingsPanel.Controls.Add($closeButton)
+
+    # Countdown view is on the SAME form. The window is never hidden after Start.
+    $script:countdownPanel = New-Object System.Windows.Forms.Panel
+    $script:countdownPanel.Location = New-Object System.Drawing.Point(24, 98)
+    $script:countdownPanel.Size = New-Object System.Drawing.Size(450, 305)
+    $script:countdownPanel.BackColor = [System.Drawing.Color]::White
+    $script:countdownPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
+    $script:countdownPanel.Visible = $false
+    $script:form.Controls.Add($script:countdownPanel)
+
+    $countTitle = New-Object System.Windows.Forms.Label
+    $countTitle.Text = "הזמן שנותר עד למצב שינה"
+    $countTitle.Location = New-Object System.Drawing.Point(20, 28)
+    $countTitle.Size = New-Object System.Drawing.Size(406, 35)
+    $countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $countTitle.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:countdownPanel.Controls.Add($countTitle)
+
+    $script:countLabel = New-Object System.Windows.Forms.Label
+    $script:countLabel.Text = "00:00"
+    $script:countLabel.Location = New-Object System.Drawing.Point(20, 72)
+    $script:countLabel.Size = New-Object System.Drawing.Size(406, 90)
+    $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 34, [System.Drawing.FontStyle]::Bold)
+    $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+    $script:countLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:countLabel.RightToLeft = [System.Windows.Forms.RightToLeft]::No
+    $script:countdownPanel.Controls.Add($script:countLabel)
+
+    $script:addButton = New-Object System.Windows.Forms.Button
+    $script:addButton.Text = "הוסף 20 שניות"
+    $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
+    $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
+    $script:addButton.BackColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
+    $script:addButton.ForeColor = [System.Drawing.Color]::White
+    $script:addButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $script:addButton.FlatAppearance.BorderSize = 0
+    $script:countdownPanel.Controls.Add($script:addButton)
+
+    $script:cancelButton = New-Object System.Windows.Forms.Button
+    $script:cancelButton.Text = "בטל טיימר"
+    $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
+    $script:cancelButton.Size = New-Object System.Drawing.Size(165, 42)
+    $script:cancelButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $script:countdownPanel.Controls.Add($script:cancelButton)
+
+    $script:status = New-Object System.Windows.Forms.Label
+    $script:status.Text = "הטיימר עדיין לא הופעל."
+    $script:status.Location = New-Object System.Drawing.Point(24, 410)
+    $script:status.Size = New-Object System.Drawing.Size(450, 25)
+    $script:status.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
+    $script:status.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:form.Controls.Add($script:status)
+
+    $script:clock = New-Object System.Windows.Forms.Timer
+    $script:clock.Interval = 200
+
+    $script:clock.Add_Tick({
+        if (-not $script:timerRunning) { return }
+
         try {
-            $ok = [SleepTimerPower]::SetSuspendState($false, $false, $false)
-            if (-not $ok) { throw "Windows לא הצליח להיכנס למצב שינה." }
+            $left = [int][math]::Ceiling(($script:deadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+            if ($left -lt 0) { $left = 0 }
+            $script:remainingSeconds = $left
+            $script:countLabel.Text = Format-Remaining $left
+
+            if ($left -le 30) {
+                if ($script:topCheck.Checked -and -not $script:form.TopMost) {
+                    $script:form.TopMost = $true
+                    $script:form.BringToFront()
+                    $script:form.Activate()
+                }
+
+                if ($script:soundCheck.Checked -and -not $script:alertPlayed) {
+                    $script:alertPlayed = $true
+                    try { [System.Media.SystemSounds]::Exclamation.Play() } catch {}
+                }
+                $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(190, 70, 45)
+            }
+
+            if ($left -gt 30 -and $script:form.TopMost) {
+                $script:form.TopMost = $false
+                $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+            }
+
+            if ($left -le 0) {
+                $script:clock.Stop()
+                $script:timerRunning = $false
+                $script:status.Text = "מכניס את המחשב למצב שינה..."
+                $script:form.TopMost = $false
+                $script:form.Refresh()
+
+                $ok = [SleepTimerPower]::SetSuspendState($false, $false, $false)
+                if (-not $ok) {
+                    $winError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+                    throw "Windows לא הצליח להיכנס למצב שינה. קוד שגיאה: $winError"
+                }
+            }
         }
         catch {
+            $script:clock.Stop()
+            $script:timerRunning = $false
+            $script:form.TopMost = $false
+            $script:settingsPanel.Visible = $true
+            $script:countdownPanel.Visible = $false
+            $script:status.Text = "הטיימר נעצר עקב שגיאה."
             [System.Windows.Forms.MessageBox]::Show(
-                "לא ניתן היה להכניס את המחשב למצב שינה." + [Environment]::NewLine + $_.Exception.Message,
-                "שגיאה",
+                $_.Exception.Message,
+                "שגיאה בטיימר",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error
             ) | Out-Null
-            $form.Show()
         }
-    }
-})
+    })
 
-$addButton.Add_Click({
-    if ($script:timerRunning) {
-        $script:remaining += 20
-        $countLabel.Text = Format-Remaining $script:remaining
-        if ($script:remaining -gt 30) {
-            $countForm.TopMost = $false
-            $countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+    $script:startButton.Add_Click({
+        try {
+            $seconds = Convert-TimeInput $script:timeBox.Text
+            $script:remainingSeconds = $seconds
+            $script:deadlineUtc = [DateTime]::UtcNow.AddSeconds($seconds)
             $script:alertPlayed = $false
+            $script:timerRunning = $true
+            $script:form.TopMost = $false
+            $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+            $script:countLabel.Text = Format-Remaining $seconds
+            $script:settingsPanel.Visible = $false
+            $script:countdownPanel.Visible = $true
+            $script:status.Text = "הטיימר פועל. אפשר להוסיף 20 שניות או לבטל."
+            $script:clock.Start()
         }
-    }
-})
+        catch {
+            [System.Windows.Forms.MessageBox]::Show(
+                $_.Exception.Message,
+                "בדיקת זמן",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            ) | Out-Null
+        }
+    })
 
-$stopButton.Add_Click({
-    $clock.Stop()
-    $script:timerRunning = $false
-    $countForm.Hide()
-    $countForm.TopMost = $false
-    $form.Show()
-    $status.Text = "הטיימר בוטל. המחשב לא ייכנס למצב שינה."
-})
+    $script:addButton.Add_Click({
+        if ($script:timerRunning) {
+            $script:deadlineUtc = $script:deadlineUtc.AddSeconds(20)
+            $script:alertPlayed = $false
+            $script:form.TopMost = $false
+            $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+            $left = [int][math]::Ceiling(($script:deadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+            $script:countLabel.Text = Format-Remaining $left
+            $script:status.Text = "נוספו 20 שניות."
+        }
+    })
 
-$countForm.Add_FormClosing({
-    if ($script:timerRunning) {
-        $clock.Stop()
+    $script:cancelButton.Add_Click({
+        $script:clock.Stop()
         $script:timerRunning = $false
-        $countForm.TopMost = $false
-        if (-not $form.IsDisposed) {
-            $form.Show()
-            $status.Text = "הטיימר בוטל. המחשב לא ייכנס למצב שינה."
-        }
-    }
-})
+        $script:form.TopMost = $false
+        $script:countdownPanel.Visible = $false
+        $script:settingsPanel.Visible = $true
+        $script:status.Text = "הטיימר בוטל. המחשב לא ייכנס למצב שינה."
+    })
 
-$startButton.Add_Click({
+    $closeButton.Add_Click({ $script:form.Close() })
+
+    $script:form.Add_FormClosing({
+        if ($script:timerRunning) {
+            $script:clock.Stop()
+            $script:timerRunning = $false
+        }
+    })
+
+    [void]$script:form.ShowDialog()
+}
+catch {
     try {
-        $script:remaining = Convert-TimeInput $timeBox.Text
-        $script:alertPlayed = $false
-        $script:timerRunning = $true
-        $countForm.TopMost = $false
-        $countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
-        $countLabel.Text = Format-Remaining $script:remaining
-        $form.Hide()
-        $countForm.Show()
-        $clock.Start()
-    }
-    catch {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
         [System.Windows.Forms.MessageBox]::Show(
-            $_.Exception.Message,
-            "בדיקת זמן",
+            $_.Exception.ToString(),
+            "שגיאה בהפעלת טיימר השינה",
             [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
+            [System.Windows.Forms.MessageBoxIcon]::Error
         ) | Out-Null
     }
-})
-
-$closeButton.Add_Click({ $form.Close() })
-$form.Add_FormClosing({
-    if ($script:timerRunning) {
-        $clock.Stop()
-        $script:timerRunning = $false
+    catch {
+        Write-Error $_
+        Read-Host "הקש Enter לסגירה" | Out-Null
     }
-})
-
-[void]$form.ShowDialog()
+}
