@@ -74,11 +74,11 @@ public static class SleepTimerPower {
     $script:form.RightToLeft = [System.Windows.Forms.RightToLeft]::Yes
     $script:form.RightToLeftLayout = $true
 
-    $header = New-Object System.Windows.Forms.Panel
-    $header.Location = New-Object System.Drawing.Point(0, 0)
-    $header.Size = New-Object System.Drawing.Size(510, 82)
-    $header.BackColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
-    $script:form.Controls.Add($header)
+    $script:header = New-Object System.Windows.Forms.Panel
+    $script:header.Location = New-Object System.Drawing.Point(0, 0)
+    $script:header.Size = New-Object System.Drawing.Size(510, 82)
+    $script:header.BackColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
+    $script:form.Controls.Add($script:header)
 
     $title = New-Object System.Windows.Forms.Label
     $title.Text = "טיימר למצב שינה"
@@ -86,7 +86,7 @@ public static class SleepTimerPower {
     $title.Font = New-Object System.Drawing.Font("Segoe UI", 19, [System.Drawing.FontStyle]::Bold)
     $title.AutoSize = $true
     $title.Location = New-Object System.Drawing.Point(275, 12)
-    $header.Controls.Add($title)
+    $script:header.Controls.Add($title)
 
     $subtitle = New-Object System.Windows.Forms.Label
     $subtitle.Text = "קובעים זמן – ובסיומו המחשב נכנס למצב שינה"
@@ -94,7 +94,7 @@ public static class SleepTimerPower {
     $subtitle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $subtitle.AutoSize = $true
     $subtitle.Location = New-Object System.Drawing.Point(145, 51)
-    $header.Controls.Add($subtitle)
+    $script:header.Controls.Add($subtitle)
 
     # Settings view
     $script:settingsPanel = New-Object System.Windows.Forms.Panel
@@ -182,13 +182,13 @@ public static class SleepTimerPower {
     $script:countdownPanel.Visible = $false
     $script:form.Controls.Add($script:countdownPanel)
 
-    $countTitle = New-Object System.Windows.Forms.Label
-    $countTitle.Text = "הזמן שנותר עד למצב שינה"
-    $countTitle.Location = New-Object System.Drawing.Point(20, 28)
-    $countTitle.Size = New-Object System.Drawing.Size(406, 35)
-    $countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-    $countTitle.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $script:countdownPanel.Controls.Add($countTitle)
+    $script:countTitle = New-Object System.Windows.Forms.Label
+    $script:countTitle.Text = "הזמן שנותר עד למצב שינה"
+    $script:countTitle.Location = New-Object System.Drawing.Point(20, 28)
+    $script:countTitle.Size = New-Object System.Drawing.Size(406, 35)
+    $script:countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $script:countTitle.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:countdownPanel.Controls.Add($script:countTitle)
 
     $script:countLabel = New-Object System.Windows.Forms.Label
     $script:countLabel.Text = "00:00"
@@ -285,8 +285,25 @@ public static class SleepTimerPower {
             $script:clock.Stop()
             $script:timerRunning = $false
             $script:form.TopMost = $false
+            $script:form.MinimumSize = New-Object System.Drawing.Size(510, 470)
+            $script:form.MaximumSize = New-Object System.Drawing.Size(510, 470)
+            $script:form.Size = New-Object System.Drawing.Size(510, 470)
+            $script:header.Visible = $true
+            $script:status.Visible = $true
             $script:settingsPanel.Visible = $true
             $script:countdownPanel.Visible = $false
+            $script:countdownPanel.Location = New-Object System.Drawing.Point(24, 98)
+            $script:countdownPanel.Size = New-Object System.Drawing.Size(450, 305)
+            $script:countTitle.Location = New-Object System.Drawing.Point(20, 28)
+            $script:countTitle.Size = New-Object System.Drawing.Size(406, 35)
+            $script:countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+            $script:countLabel.Location = New-Object System.Drawing.Point(20, 72)
+            $script:countLabel.Size = New-Object System.Drawing.Size(406, 90)
+            $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 34, [System.Drawing.FontStyle]::Bold)
+            $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
+            $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
+            $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
+            $script:cancelButton.Size = New-Object System.Drawing.Size(165, 42)
             $script:status.Text = "הטיימר נעצר עקב שגיאה."
             [System.Windows.Forms.MessageBox]::Show(
                 $_.Exception.Message,
@@ -314,13 +331,17 @@ public static class SleepTimerPower {
             $script:form.MinimumSize = New-Object System.Drawing.Size(370, 205)
             $script:form.MaximumSize = New-Object System.Drawing.Size(370, 205)
             $script:form.Size = New-Object System.Drawing.Size(370, 205)
-            $header.Visible = $false
+            $screenArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+            $smallX = $screenArea.Left + [int](($screenArea.Width - $script:form.Width) / 2)
+            $smallY = $screenArea.Top + [int](($screenArea.Height - $script:form.Height) / 2)
+            $script:form.Location = New-Object System.Drawing.Point($smallX, $smallY)
+            $script:header.Visible = $false
             $script:status.Visible = $false
             $script:countdownPanel.Location = New-Object System.Drawing.Point(8, 8)
             $script:countdownPanel.Size = New-Object System.Drawing.Size(338, 148)
-            $countTitle.Location = New-Object System.Drawing.Point(10, 6)
-            $countTitle.Size = New-Object System.Drawing.Size(314, 24)
-            $countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+            $script:countTitle.Location = New-Object System.Drawing.Point(10, 6)
+            $script:countTitle.Size = New-Object System.Drawing.Size(314, 24)
+            $script:countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
             $script:countLabel.Location = New-Object System.Drawing.Point(10, 30)
             $script:countLabel.Size = New-Object System.Drawing.Size(314, 52)
             $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 26, [System.Drawing.FontStyle]::Bold)
@@ -363,20 +384,18 @@ public static class SleepTimerPower {
         $script:clock.Stop()
         $script:timerRunning = $false
         $script:form.TopMost = $false
-        $script:countdownPanel.Visible = $false
-        $script:settingsPanel.Visible = $true
-
-        # Restore the full settings window after cancellation.
         $script:form.MinimumSize = New-Object System.Drawing.Size(510, 470)
         $script:form.MaximumSize = New-Object System.Drawing.Size(510, 470)
         $script:form.Size = New-Object System.Drawing.Size(510, 470)
-        $header.Visible = $true
+        $script:header.Visible = $true
         $script:status.Visible = $true
+        $script:countdownPanel.Visible = $false
+        $script:settingsPanel.Visible = $true
         $script:countdownPanel.Location = New-Object System.Drawing.Point(24, 98)
         $script:countdownPanel.Size = New-Object System.Drawing.Size(450, 305)
-        $countTitle.Location = New-Object System.Drawing.Point(20, 28)
-        $countTitle.Size = New-Object System.Drawing.Size(406, 35)
-        $countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $script:countTitle.Location = New-Object System.Drawing.Point(20, 28)
+        $script:countTitle.Size = New-Object System.Drawing.Size(406, 35)
+        $script:countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
         $script:countLabel.Location = New-Object System.Drawing.Point(20, 72)
         $script:countLabel.Size = New-Object System.Drawing.Size(406, 90)
         $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 34, [System.Drawing.FontStyle]::Bold)
@@ -384,7 +403,6 @@ public static class SleepTimerPower {
         $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
         $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
         $script:cancelButton.Size = New-Object System.Drawing.Size(165, 42)
-
         $script:status.Text = "הטיימר בוטל. המחשב לא ייכנס למצב שינה."
     })
 
