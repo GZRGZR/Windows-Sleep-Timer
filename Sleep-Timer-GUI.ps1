@@ -231,6 +231,9 @@ public static class SleepTimerPower {
     $script:addButton.FlatAppearance.BorderSize = 0
     $script:countdownPanel.Controls.Add($script:addButton)
 
+    $script:addToolTip = New-Object System.Windows.Forms.ToolTip
+    $script:addToolTip.SetToolTip($script:addButton, "בשלב הסיום אפשר להוסיף שוב רק כשנותרו 20 שניות או פחות.")
+
     $script:cancelButton = New-Object System.Windows.Forms.Button
     $script:cancelButton.Text = "בטל טיימר"
     $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
@@ -389,7 +392,6 @@ public static class SleepTimerPower {
             $script:detailsLabel.Size = New-Object System.Drawing.Size(334, 24)
             $script:limitLabel.Location = New-Object System.Drawing.Point(10, 151)
             $script:limitLabel.Size = New-Object System.Drawing.Size(334, 22)
-            $script:addButton.ToolTipText = "בשלב הסיום ניתן להוסיף רק כאשר נותרו 20 שניות או פחות."
             $script:addButton.Location = New-Object System.Drawing.Point(184, 112)
             $script:addButton.Size = New-Object System.Drawing.Size(150, 35)
             $script:cancelButton.Location = New-Object System.Drawing.Point(18, 112)
@@ -410,11 +412,17 @@ public static class SleepTimerPower {
 
     $script:addButton.Add_Click({
         if ($script:timerRunning) {
-            $leftNow = [int][math]::Ceiling(($script:deadlineUtc - [DateTime]::UtcNow).TotalSeconds)
+            $rawLeftNow = ($script:deadlineUtc - [DateTime]::UtcNow).TotalSeconds
 
-            # In the end phase, require the remaining time to fall back to 20 seconds
-            # before another 20-second extension can be added.
-            if ($script:latePhase -and $leftNow -gt 20) {
+            # If the user clicks exactly as the final 20-second phase begins,
+            # latch the phase here too (not only on the next timer tick).
+            if (-not $script:latePhase -and $rawLeftNow -le 20) {
+                $script:latePhase = $true
+            }
+
+            # During the end phase, extensions are only allowed at <=20 seconds.
+            # Each click can therefore raise the remaining time to at most 40 seconds.
+            if ($script:latePhase -and $rawLeftNow -gt 20) {
                 $script:addButton.Enabled = $false
                 return
             }
