@@ -14,7 +14,7 @@ public static class SleepTimerPower {
 }
 '@
 
-    function Convert-TimeInput([string]$text) {
+    function script:Convert-TimeInput([string]$text) {
         $s = ($text.Trim() -replace ',', '.')
         if ($s -notmatch '^\d+(\.\d+)?$') {
             throw "יש להזין מספר בלבד, לדוגמה 10 או 3.4"
@@ -44,7 +44,7 @@ public static class SleepTimerPower {
         return [int]$totalSeconds
     }
 
-    function Format-Remaining([int]$seconds) {
+    function script:Format-Remaining([int]$seconds) {
         $span = [TimeSpan]::FromSeconds([math]::Max(0, $seconds))
         return ("{0:00}:{1:00}" -f [math]::Floor($span.TotalMinutes), $span.Seconds)
     }
