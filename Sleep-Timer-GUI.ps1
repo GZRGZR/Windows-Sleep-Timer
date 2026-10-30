@@ -143,7 +143,7 @@ public static class SleepTimerPower {
     $script:settingsPanel.Controls.Add($rule)
 
     $script:topCheck = New-Object System.Windows.Forms.CheckBox
-    $script:topCheck.Text = "הצג חלון מעל שאר החלונות רק ב-20 השניות האחרונות"
+    $script:topCheck.Text = "הצג חלון מעל שאר החלונות בשלב הסיום"
     $script:topCheck.Location = New-Object System.Drawing.Point(20, 167)
     $script:topCheck.Size = New-Object System.Drawing.Size(410, 25)
     $script:topCheck.Checked = $true
