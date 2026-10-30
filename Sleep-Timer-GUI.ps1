@@ -10,7 +10,12 @@ using System;
 using System.Runtime.InteropServices;
 public static class SleepTimerPower {
     [DllImport("powrprof.dll", SetLastError = true)]
-    public static extern bool SetSuspendState(bool hibernate, bool forceCritical, bool disableWakeEvent);
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool SetSuspendState(
+        [MarshalAs(UnmanagedType.U1)] bool hibernate,
+        [MarshalAs(UnmanagedType.U1)] bool forceCritical,
+        [MarshalAs(UnmanagedType.U1)] bool disableWakeEvent
+    );
 }
 '@
 
