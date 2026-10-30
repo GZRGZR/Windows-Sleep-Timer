@@ -212,6 +212,15 @@ public static class SleepTimerPower {
     $script:detailsLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $script:countdownPanel.Controls.Add($script:detailsLabel)
 
+    $script:limitLabel = New-Object System.Windows.Forms.Label
+    $script:limitLabel.Text = "בשלב הסיום ניתן להוסיף שוב רק כשיישארו 20 שניות."
+    $script:limitLabel.Location = New-Object System.Drawing.Point(20, 238)
+    $script:limitLabel.Size = New-Object System.Drawing.Size(406, 22)
+    $script:limitLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $script:limitLabel.ForeColor = [System.Drawing.Color]::FromArgb(100, 105, 115)
+    $script:limitLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:countdownPanel.Controls.Add($script:limitLabel)
+
     $script:addButton = New-Object System.Windows.Forms.Button
     $script:addButton.Text = "הוסף 20 שניות"
     $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
@@ -378,6 +387,9 @@ public static class SleepTimerPower {
             $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 25, [System.Drawing.FontStyle]::Bold)
             $script:detailsLabel.Location = New-Object System.Drawing.Point(10, 78)
             $script:detailsLabel.Size = New-Object System.Drawing.Size(334, 24)
+            $script:limitLabel.Location = New-Object System.Drawing.Point(10, 151)
+            $script:limitLabel.Size = New-Object System.Drawing.Size(334, 22)
+            $script:addButton.ToolTipText = "בשלב הסיום ניתן להוסיף רק כאשר נותרו 20 שניות או פחות."
             $script:addButton.Location = New-Object System.Drawing.Point(184, 112)
             $script:addButton.Size = New-Object System.Drawing.Size(150, 35)
             $script:cancelButton.Location = New-Object System.Drawing.Point(18, 112)
@@ -448,6 +460,9 @@ public static class SleepTimerPower {
         $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 34, [System.Drawing.FontStyle]::Bold)
         $script:detailsLabel.Location = New-Object System.Drawing.Point(20, 164)
         $script:detailsLabel.Size = New-Object System.Drawing.Size(406, 24)
+        $script:limitLabel.Location = New-Object System.Drawing.Point(20, 238)
+        $script:limitLabel.Size = New-Object System.Drawing.Size(406, 22)
+        $script:addButton.ToolTipText = "הוסף 20 שניות לטיימר."
         $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
         $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
         $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
