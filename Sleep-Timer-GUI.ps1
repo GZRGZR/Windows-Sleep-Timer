@@ -350,11 +350,6 @@ public static class SleepTimerPower {
             $script:cancelButton.Location = New-Object System.Drawing.Point(18, 93)
             $script:cancelButton.Size = New-Object System.Drawing.Size(140, 35)
 
-            $screenArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-            $script:form.Location = New-Object System.Drawing.Point(
-                ($screenArea.Left + [int](($screenArea.Width - $script:form.Width) / 2)),
-                ($screenArea.Top + [int](($screenArea.Height - $script:form.Height) / 2))
-            )
             $script:status.Text = "הטיימר פועל. אפשר להוסיף 20 שניות או לבטל."
             $script:clock.Start()
         }
