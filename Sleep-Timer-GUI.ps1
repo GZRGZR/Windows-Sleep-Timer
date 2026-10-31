@@ -521,14 +521,11 @@ public static class SleepTimerPower {
             $script:detailsLabel.Size = New-Object System.Drawing.Size(334, 24)
             $script:limitLabel.Location = New-Object System.Drawing.Point(10, 151)
             $script:limitLabel.Size = New-Object System.Drawing.Size(334, 22)
-            $script:addButton.Location = New-Object System.Drawing.Point(184, 112)
-            $script:addButton.Size = New-Object System.Drawing.Size(150, 35)
-            $script:cancelButton.Location = New-Object System.Drawing.Point(18, 112)
-            $script:cancelButton.Size = New-Object System.Drawing.Size(150, 35)
-            $script:cancelButton.Visible = $false
             $script:addButton.Location = New-Object System.Drawing.Point(104, 112)
+            $script:addButton.Size = New-Object System.Drawing.Size(150, 35)
+            $script:cancelButton.Visible = $false
 
-            $script:status.Text = "הטיימר פועל. אפשר להוסיף 20 שניות או לבטל."
+            $script:status.Text = "הטיימר פועל."
             $script:clock.Start()
         }
         catch {
