@@ -314,7 +314,7 @@ public static class SleepTimerPower {
 
     $script:status = New-Object System.Windows.Forms.Label
     $script:status.Text = "הטיימר עדיין לא הופעל."
-    $script:status.Location = New-Object System.Drawing.Point(24, 462)
+    $script:status.Location = New-Object System.Drawing.Point(24, 455)
     $script:status.Size = New-Object System.Drawing.Size(450, 25)
     $script:status.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
     $script:status.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
