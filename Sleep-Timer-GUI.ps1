@@ -193,7 +193,7 @@ public static class SleepTimerPower {
     $script:settingsPanel.Controls.Add($script:topCheck)
 
     $script:soundCheck = New-Object System.Windows.Forms.CheckBox
-    $script:soundCheck.Text = "השמע צליל התראה 30 שניות לפני השינה"
+    $script:soundCheck.Text = "השמע צליל התראה 30 שניות לפני סיום הטיימר"
     $script:soundCheck.Location = New-Object System.Drawing.Point(20, 273)
     $script:soundCheck.Size = New-Object System.Drawing.Size(410, 25)
     $script:soundCheck.Checked = $true
@@ -289,7 +289,7 @@ public static class SleepTimerPower {
             [System.Windows.Forms.MessageBoxIcon]::Question
         )
         if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
-            $script:cancelButton.PerformClick()
+            Return-ToSettings
         }
     })
 
@@ -323,6 +323,39 @@ public static class SleepTimerPower {
     function script:Update-DetailsLabel {
         $initialText = Format-Remaining $script:initialDurationSeconds
         $script:detailsLabel.Text = "משך התחלתי: $initialText  |  הארכות: $script:extensionCount"
+    }
+
+    function script:Return-ToSettings {
+        $script:clock.Stop()
+        $script:timerRunning = $false
+        $script:latePhase = $false
+        $script:addButton.Enabled = $true
+        $script:form.TopMost = $false
+
+        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 525)
+        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 525)
+        $script:form.Size = New-Object System.Drawing.Size(510, 525)
+        $script:header.Visible = $true
+        $script:status.Visible = $true
+        $script:settingsPanel.Visible = $true
+        $script:countdownPanel.Visible = $false
+
+        $script:countdownPanel.Location = New-Object System.Drawing.Point(24, 98)
+        $script:countdownPanel.Size = New-Object System.Drawing.Size(450, 355)
+        $script:countTitle.Location = New-Object System.Drawing.Point(20, 28)
+        $script:countTitle.Size = New-Object System.Drawing.Size(406, 35)
+        $script:countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $script:countLabel.Location = New-Object System.Drawing.Point(20, 72)
+        $script:countLabel.Size = New-Object System.Drawing.Size(406, 90)
+        $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 34, [System.Drawing.FontStyle]::Bold)
+        $script:detailsLabel.Location = New-Object System.Drawing.Point(20, 164)
+        $script:detailsLabel.Size = New-Object System.Drawing.Size(406, 24)
+        $script:limitLabel.Location = New-Object System.Drawing.Point(20, 238)
+        $script:limitLabel.Size = New-Object System.Drawing.Size(406, 22)
+        $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
+        $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
+        $script:cancelButton.Visible = $false
+        $script:status.Text = "הטיימר בוטל. אפשר לבחור זמן חדש."
     }
 
     $script:clock = New-Object System.Windows.Forms.Timer
@@ -373,7 +406,12 @@ public static class SleepTimerPower {
             if ($left -le 0) {
                 $script:clock.Stop()
                 $script:timerRunning = $false
-                $script:status.Text = "מכניס את המחשב למצב שינה..."
+                if ($script:selectedAction -eq "shutdown") {
+                    $script:status.Text = "מכבה את המחשב..."
+                }
+                else {
+                    $script:status.Text = "מכניס את המחשב למצב שינה..."
+                }
                 $script:form.TopMost = $false
                 $script:form.Refresh()
 
@@ -538,39 +576,9 @@ public static class SleepTimerPower {
         }
     })
 
-    $script:cancelButton.Add_Click({
-        $script:clock.Stop()
-        $script:timerRunning = $false
-        $script:latePhase = $false
-        $script:addButton.Enabled = $true
-        $script:form.TopMost = $false
-        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 525)
-        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 525)
-        $script:form.Size = New-Object System.Drawing.Size(510, 525)
-        $script:header.Visible = $true
-        $script:status.Visible = $true
-        $script:countdownPanel.Visible = $false
-        $script:settingsPanel.Visible = $true
-        $script:countdownPanel.Location = New-Object System.Drawing.Point(24, 98)
-        $script:countdownPanel.Size = New-Object System.Drawing.Size(450, 355)
-        $script:countTitle.Location = New-Object System.Drawing.Point(20, 28)
-        $script:countTitle.Size = New-Object System.Drawing.Size(406, 35)
-        $script:countTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-        $script:countLabel.Location = New-Object System.Drawing.Point(20, 72)
-        $script:countLabel.Size = New-Object System.Drawing.Size(406, 90)
-        $script:countLabel.Font = New-Object System.Drawing.Font("Segoe UI", 34, [System.Drawing.FontStyle]::Bold)
-        $script:detailsLabel.Location = New-Object System.Drawing.Point(20, 164)
-        $script:detailsLabel.Size = New-Object System.Drawing.Size(406, 24)
-        $script:limitLabel.Location = New-Object System.Drawing.Point(20, 238)
-        $script:limitLabel.Size = New-Object System.Drawing.Size(406, 22)
-        $script:addButton.Location = New-Object System.Drawing.Point(220, 190)
-        $script:addButton.Size = New-Object System.Drawing.Size(185, 42)
-        $script:cancelButton.Location = New-Object System.Drawing.Point(40, 190)
-        $script:cancelButton.Size = New-Object System.Drawing.Size(165, 42)
-        $script:status.Text = "הטיימר בוטל. המחשב לא ייכנס למצב שינה."
-    })
+    $script:cancelButton.Add_Click({ Return-ToSettings })
 
-    $closeButton.Add_Click({ $script:form.Close() })
+$closeButton.Add_Click({ $script:form.Close() })
 
     $script:form.Add_FormClosing({
         if ($script:timerRunning) {
