@@ -66,7 +66,7 @@ public static class SleepTimerPower {
 
     # Main window
     $script:form = New-Object System.Windows.Forms.Form
-    $script:form.Text = "טיימר למצב שינה"
+    $script:form.Text = "טיימר שינה / כיבוי"
     $script:form.Size = New-Object System.Drawing.Size(510, 525)
     $script:form.MinimumSize = New-Object System.Drawing.Size(510, 525)
     $script:form.MaximumSize = New-Object System.Drawing.Size(510, 525)
@@ -85,7 +85,7 @@ public static class SleepTimerPower {
     $script:form.Controls.Add($script:header)
 
     $title = New-Object System.Windows.Forms.Label
-    $title.Text = "טיימר למצב שינה"
+    $title.Text = "טיימר שינה / כיבוי"
     $title.ForeColor = [System.Drawing.Color]::White
     $title.Font = New-Object System.Drawing.Font("Segoe UI", 19, [System.Drawing.FontStyle]::Bold)
     $title.AutoSize = $true
@@ -93,7 +93,7 @@ public static class SleepTimerPower {
     $script:header.Controls.Add($title)
 
     $subtitle = New-Object System.Windows.Forms.Label
-    $subtitle.Text = "קובעים זמן – ובסיומו המחשב נכנס למצב שינה"
+    $subtitle.Text = "קובעים זמן – ובסיומו המחשב יפעל לפי הבחירה"
     $subtitle.ForeColor = [System.Drawing.Color]::FromArgb(225, 235, 248)
     $subtitle.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $subtitle.AutoSize = $true
@@ -109,7 +109,7 @@ public static class SleepTimerPower {
     $script:form.Controls.Add($script:settingsPanel)
 
     $prompt = New-Object System.Windows.Forms.Label
-    $prompt.Text = "כמה זמן עד שהמחשב ייכנס למצב שינה?"
+    $prompt.Text = "כמה זמן עד שהמחשב ייכנס לשינה או יכבה?"
     $prompt.Location = New-Object System.Drawing.Point(22, 15)
     $prompt.Size = New-Object System.Drawing.Size(404, 28)
     $prompt.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
@@ -277,7 +277,7 @@ public static class SleepTimerPower {
     $script:addToolTip.SetToolTip($script:addButton, "בשלב הסיום אפשר להוסיף שוב רק כשנותרו 20 שניות או פחות.")
 
     $script:countdownMenu = New-Object System.Windows.Forms.ContextMenuStrip
-    $script:returnSettingsItem = New-Object System.Windows.Forms.ToolStripMenuItem("חזרה לבחירת זמן...")
+    $script:returnSettingsItem = New-Object System.Windows.Forms.ToolStripMenuItem("אפשרויות נוספות: חזרה לבחירת זמן...")
     [void]$script:countdownMenu.Items.Add($script:returnSettingsItem)
 
     $script:returnSettingsItem.Add_Click({
@@ -487,6 +487,8 @@ public static class SleepTimerPower {
             $script:addButton.Size = New-Object System.Drawing.Size(150, 35)
             $script:cancelButton.Location = New-Object System.Drawing.Point(18, 112)
             $script:cancelButton.Size = New-Object System.Drawing.Size(150, 35)
+            $script:cancelButton.Visible = $false
+            $script:addButton.Location = New-Object System.Drawing.Point(104, 112)
 
             $script:status.Text = "הטיימר פועל. אפשר להוסיף 20 שניות או לבטל."
             $script:clock.Start()
