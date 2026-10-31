@@ -335,6 +335,10 @@ public static class SleepTimerPower {
         $script:form.MinimumSize = New-Object System.Drawing.Size(510, 525)
         $script:form.MaximumSize = New-Object System.Drawing.Size(510, 525)
         $script:form.Size = New-Object System.Drawing.Size(510, 525)
+        $screenArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+        $restoreX = $screenArea.Left + [int](($screenArea.Width - $script:form.Width) / 2)
+        $restoreY = $screenArea.Top + [int](($screenArea.Height - $script:form.Height) / 2)
+        $script:form.Location = New-Object System.Drawing.Point($restoreX, $restoreY)
         $script:header.Visible = $true
         $script:status.Visible = $true
         $script:settingsPanel.Visible = $true
