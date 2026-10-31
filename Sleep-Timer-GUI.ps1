@@ -255,7 +255,7 @@ public static class SleepTimerPower {
     $script:countdownPanel.Controls.Add($script:detailsLabel)
 
     $script:limitLabel = New-Object System.Windows.Forms.Label
-    $script:limitLabel.Text = "בשלב הסיום ניתן להוסיף שוב רק כשיישארו 20 שניות."
+    $script:limitLabel.Text = "הארכה נוספת: כשנותרו 20 שניות | חזרה: לחיצה ימנית"
     $script:limitLabel.Location = New-Object System.Drawing.Point(20, 238)
     $script:limitLabel.Size = New-Object System.Drawing.Size(406, 22)
     $script:limitLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8)
