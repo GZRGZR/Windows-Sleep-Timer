@@ -80,7 +80,7 @@ public static class SleepTimerPower {
         $workingDirectoryXml = [System.Security.SecurityElement]::Escape((Split-Path -Parent $script:scriptFilePath))
         $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>פתיחת טיימר שינה/כיבוי בחשבון המשתמש הנוכחי.</Description></RegistrationInfo>
   <Triggers>$triggerXml</Triggers>
   <Principals>
@@ -606,7 +606,7 @@ public static class SleepTimerPower {
                     }
 
                     # SetSuspendState returns after Windows wakes up again.
-                    # Close the timer immediately so it is not left open after wake.
+                    # Reuse this process when wake prompts are enabled, preventing a duplicate window.
                     if ($script:autoWakeCheck.Checked) {
                         Return-ToSettings
                         $script:status.Text = "המחשב התעורר. אפשר לבחור זמן חדש."
