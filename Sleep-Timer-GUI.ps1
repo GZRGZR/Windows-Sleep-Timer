@@ -1,7 +1,14 @@
-﻿$ErrorActionPreference = 'Stop'
+﻿param([switch]$AutoLaunch)
+$ErrorActionPreference = 'Stop'
 
 try {
     Add-Type -AssemblyName System.Windows.Forms
+    $script:scriptFilePath = $PSCommandPath
+    $script:mutexOwned = $false
+    $script:singleInstanceMutex = New-Object System.Threading.Mutex($false, "Local\WindowsSleepTimerSingleInstance")
+    try { $script:mutexOwned = $script:singleInstanceMutex.WaitOne(0, $false) }
+    catch [System.Threading.AbandonedMutexException] { $script:mutexOwned = $true }
+    if (-not $script:mutexOwned) { return }
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
 
@@ -54,6 +61,84 @@ public static class SleepTimerPower {
         return ("{0:00}:{1:00}" -f [math]::Floor($span.TotalMinutes), $span.Seconds)
     }
 
+    function script:Read-AutoPromptSettings {
+        $settings = @{ LaunchAtLogon = $true; LaunchOnWake = $true }
+        if (Test-Path -LiteralPath $script:autoSettingsPath) {
+            try {
+                $saved = Get-Content -LiteralPath $script:autoSettingsPath -Raw | ConvertFrom-Json
+                if ($null -ne $saved.LaunchAtLogon) { $settings.LaunchAtLogon = [bool]$saved.LaunchAtLogon }
+                if ($null -ne $saved.LaunchOnWake) { $settings.LaunchOnWake = [bool]$saved.LaunchOnWake }
+            }
+            catch { }
+        }
+        return $settings
+    }
+
+    function script:Register-AutoPromptTask([string]$taskName, [string]$triggerXml) {
+        $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $scriptPathXml = [System.Security.SecurityElement]::Escape($script:scriptFilePath)
+        $workingDirectoryXml = [System.Security.SecurityElement]::Escape((Split-Path -Parent $script:scriptFilePath))
+        $taskXml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo><Description>פתיחת טיימר שינה/כיבוי בחשבון המשתמש הנוכחי.</Description></RegistrationInfo>
+  <Triggers>$triggerXml</Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>$sid</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <Enabled>true</Enabled><Hidden>false</Hidden>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>powershell.exe</Command>
+      <Arguments>-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File &quot;$scriptPathXml&quot; -AutoLaunch</Arguments>
+      <WorkingDirectory>$workingDirectoryXml</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+"@
+        Register-ScheduledTask -TaskName $taskName -Xml $taskXml -Force -ErrorAction Stop | Out-Null
+    }
+
+    function script:Remove-AutoPromptTask([string]$taskName) {
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    }
+
+    function script:Apply-AutoPromptSettings([bool]$launchAtLogon, [bool]$launchOnWake) {
+        $folder = Split-Path -Parent $script:autoSettingsPath
+        if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
+
+        if ($launchAtLogon) {
+            $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $logonTrigger = '<LogonTrigger><Enabled>true</Enabled><UserId>' + $sid + '</UserId></LogonTrigger>'
+            Register-AutoPromptTask -taskName 'WindowsSleepTimer-AtLogon' -triggerXml $logonTrigger
+        } else {
+            Remove-AutoPromptTask -taskName 'WindowsSleepTimer-AtLogon'
+        }
+
+        if ($launchOnWake) {
+            $subscription = '<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name=''Microsoft-Windows-Power-Troubleshooter''] and EventID=1]]</Select></Query></QueryList>'
+            $escapedSubscription = [System.Security.SecurityElement]::Escape($subscription)
+            $wakeTrigger = '<EventTrigger><Enabled>true</Enabled><Subscription>' + $escapedSubscription + '</Subscription><Delay>PT2S</Delay></EventTrigger>'
+            Register-AutoPromptTask -taskName 'WindowsSleepTimer-AtWake' -triggerXml $wakeTrigger
+        } else {
+            Remove-AutoPromptTask -taskName 'WindowsSleepTimer-AtWake'
+        }
+
+        @{ LaunchAtLogon = $launchAtLogon; LaunchOnWake = $launchOnWake } |
+            ConvertTo-Json | Set-Content -LiteralPath $script:autoSettingsPath -Encoding UTF8
+    }
+
     # State and controls are script-scoped so the event callbacks always see them.
     $script:timerRunning = $false
     $script:alertPlayed = $false
@@ -63,13 +148,15 @@ public static class SleepTimerPower {
     $script:extensionCount = 0
     $script:latePhase = $false
     $script:selectedAction = "sleep"
+    $script:autoSettingsPath = Join-Path $env:LOCALAPPDATA "WindowsSleepTimer\autostart.json"
+    $script:autoSettingsBusy = $false
 
     # Main window
     $script:form = New-Object System.Windows.Forms.Form
     $script:form.Text = "טיימר שינה / כיבוי"
-    $script:form.Size = New-Object System.Drawing.Size(510, 525)
-    $script:form.MinimumSize = New-Object System.Drawing.Size(510, 525)
-    $script:form.MaximumSize = New-Object System.Drawing.Size(510, 525)
+    $script:form.Size = New-Object System.Drawing.Size(510, 610)
+    $script:form.MinimumSize = New-Object System.Drawing.Size(510, 610)
+    $script:form.MaximumSize = New-Object System.Drawing.Size(510, 610)
     $script:form.StartPosition = "CenterScreen"
     $script:form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
     $script:form.MaximizeBox = $false
@@ -103,7 +190,7 @@ public static class SleepTimerPower {
     # Settings view
     $script:settingsPanel = New-Object System.Windows.Forms.Panel
     $script:settingsPanel.Location = New-Object System.Drawing.Point(24, 98)
-    $script:settingsPanel.Size = New-Object System.Drawing.Size(450, 355)
+    $script:settingsPanel.Size = New-Object System.Drawing.Size(450, 440)
     $script:settingsPanel.BackColor = [System.Drawing.Color]::White
     $script:settingsPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
     $script:form.Controls.Add($script:settingsPanel)
@@ -202,7 +289,7 @@ public static class SleepTimerPower {
 
     $script:startButton = New-Object System.Windows.Forms.Button
     $script:startButton.Text = "התחל טיימר"
-    $script:startButton.Location = New-Object System.Drawing.Point(230, 310)
+    $script:startButton.Location = New-Object System.Drawing.Point(230, 398)
     $script:startButton.Size = New-Object System.Drawing.Size(176, 34)
     $script:startButton.BackColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
     $script:startButton.ForeColor = [System.Drawing.Color]::White
@@ -212,9 +299,9 @@ public static class SleepTimerPower {
     $script:settingsPanel.Controls.Add($script:startButton)
 
     $closeButton = New-Object System.Windows.Forms.Button
-    $closeButton.Text = "סגור"
-    $closeButton.Location = New-Object System.Drawing.Point(40, 310)
-    $closeButton.Size = New-Object System.Drawing.Size(166, 34)
+    $closeButton.Text = "סגור ללא טיימר"
+    $closeButton.Location = New-Object System.Drawing.Point(40, 398)
+    $closeButton.Size = New-Object System.Drawing.Size(176, 34)
     $closeButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $script:settingsPanel.Controls.Add($closeButton)
 
@@ -314,11 +401,93 @@ public static class SleepTimerPower {
 
     $script:status = New-Object System.Windows.Forms.Label
     $script:status.Text = "הטיימר עדיין לא הופעל."
-    $script:status.Location = New-Object System.Drawing.Point(24, 455)
+    $script:status.Location = New-Object System.Drawing.Point(24, 545)
     $script:status.Size = New-Object System.Drawing.Size(450, 25)
     $script:status.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
     $script:status.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $script:form.Controls.Add($script:status)
+
+    $autoPromptLabel = New-Object System.Windows.Forms.Label
+    $autoPromptLabel.Text = "פתיחה ושאלה אוטומטית:"
+    $autoPromptLabel.Location = New-Object System.Drawing.Point(18, 300)
+    $autoPromptLabel.Size = New-Object System.Drawing.Size(410, 24)
+    $autoPromptLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $autoPromptLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:settingsPanel.Controls.Add($autoPromptLabel)
+
+    $script:autoLogonCheck = New-Object System.Windows.Forms.CheckBox
+    $script:autoLogonCheck.Text = "שאל אותי בכל כניסה ל-Windows (הדלקה/הפעלה מחדש)"
+    $script:autoLogonCheck.Location = New-Object System.Drawing.Point(20, 324)
+    $script:autoLogonCheck.Size = New-Object System.Drawing.Size(410, 24)
+    $script:autoLogonCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:settingsPanel.Controls.Add($script:autoLogonCheck)
+
+    $script:autoWakeCheck = New-Object System.Windows.Forms.CheckBox
+    $script:autoWakeCheck.Text = "שאל אותי בכל התעוררות ממצב שינה"
+    $script:autoWakeCheck.Location = New-Object System.Drawing.Point(20, 350)
+    $script:autoWakeCheck.Size = New-Object System.Drawing.Size(410, 24)
+    $script:autoWakeCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:settingsPanel.Controls.Add($script:autoWakeCheck)
+
+    $autoPromptNote = New-Object System.Windows.Forms.Label
+    $autoPromptNote.Text = "הסימון נשמר מיד. סגירה ב-X או 'סגור ללא טיימר' אינה מבטלת זאת."
+    $autoPromptNote.Location = New-Object System.Drawing.Point(12, 374)
+    $autoPromptNote.Size = New-Object System.Drawing.Size(424, 22)
+    $autoPromptNote.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $autoPromptNote.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
+    $autoPromptNote.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:settingsPanel.Controls.Add($autoPromptNote)
+
+    $savedAutoSettings = Read-AutoPromptSettings
+    $script:autoLogonCheck.Checked = [bool]$savedAutoSettings.LaunchAtLogon
+    $script:autoWakeCheck.Checked = [bool]$savedAutoSettings.LaunchOnWake
+
+    $autoOptionsChanged = {
+        if ($script:autoSettingsBusy) { return }
+        $script:autoSettingsBusy = $true
+        try {
+            Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked
+            $script:status.Text = "הגדרות הפתיחה האוטומטית נשמרו."
+        }
+        catch {
+            $script:autoLogonCheck.Checked = $false
+            $script:autoWakeCheck.Checked = $false
+            try { Apply-AutoPromptSettings -launchAtLogon $false -launchOnWake $false } catch {}
+            $script:status.Text = "לא ניתן להגדיר פתיחה אוטומטית."
+            [System.Windows.Forms.MessageBox]::Show(
+                "Windows לא הצליח לשמור את ההגדרה. אפשר להמשיך להשתמש בטיימר כרגיל." + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message,
+                "הגדרות פתיחה אוטומטית",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            ) | Out-Null
+        }
+        finally {
+            $script:autoSettingsBusy = $false
+        }
+    }
+    $script:autoLogonCheck.Add_CheckedChanged($autoOptionsChanged)
+    $script:autoWakeCheck.Add_CheckedChanged($autoOptionsChanged)
+
+    $script:autoSettingsBusy = $true
+    try {
+        Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked
+        $script:status.Text = "הגדרות הפתיחה האוטומטית פעילות לפי הסימונים."
+    }
+    catch {
+        $script:autoLogonCheck.Checked = $false
+        $script:autoWakeCheck.Checked = $false
+        try { Apply-AutoPromptSettings -launchAtLogon $false -launchOnWake $false } catch {}
+        $script:status.Text = "פתיחה אוטומטית לא הוגדרה; ניתן להשתמש בטיימר כרגיל."
+        [System.Windows.Forms.MessageBox]::Show(
+            "לא ניתן לרשום את משימות ההפעלה האוטומטית ב-Windows. שאר אפשרויות הטיימר זמינות כרגיל." + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message,
+            "הגדרות פתיחה אוטומטית",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
+    }
+    finally {
+        $script:autoSettingsBusy = $false
+    }
 
     function script:Update-DetailsLabel {
         $initialText = Format-Remaining $script:initialDurationSeconds
@@ -332,9 +501,9 @@ public static class SleepTimerPower {
         $script:addButton.Enabled = $true
         $script:form.TopMost = $false
 
-        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 525)
-        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 525)
-        $script:form.Size = New-Object System.Drawing.Size(510, 525)
+        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 610)
+        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 610)
+        $script:form.Size = New-Object System.Drawing.Size(510, 610)
         $screenArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
         $restoreX = $screenArea.Left + [int](($screenArea.Width - $script:form.Width) / 2)
         $restoreY = $screenArea.Top + [int](($screenArea.Height - $script:form.Height) / 2)
@@ -438,8 +607,15 @@ public static class SleepTimerPower {
 
                     # SetSuspendState returns after Windows wakes up again.
                     # Close the timer immediately so it is not left open after wake.
-                    $script:status.Text = "המחשב התעורר; התוכנה נסגרת."
-                    $script:form.Close()
+                    if ($script:autoWakeCheck.Checked) {
+                        Return-ToSettings
+                        $script:status.Text = "המחשב התעורר. אפשר לבחור זמן חדש."
+                        $script:form.Activate()
+                    }
+                    else {
+                        $script:status.Text = "המחשב התעורר; התוכנה נסגרת."
+                        $script:form.Close()
+                    }
                     return
                 }
             }
@@ -448,9 +624,9 @@ public static class SleepTimerPower {
             $script:clock.Stop()
             $script:timerRunning = $false
             $script:form.TopMost = $false
-            $script:form.MinimumSize = New-Object System.Drawing.Size(510, 525)
-            $script:form.MaximumSize = New-Object System.Drawing.Size(510, 525)
-            $script:form.Size = New-Object System.Drawing.Size(510, 525)
+            $script:form.MinimumSize = New-Object System.Drawing.Size(510, 610)
+            $script:form.MaximumSize = New-Object System.Drawing.Size(510, 610)
+            $script:form.Size = New-Object System.Drawing.Size(510, 610)
             $script:header.Visible = $true
             $script:status.Visible = $true
             $script:settingsPanel.Visible = $true
@@ -603,5 +779,13 @@ catch {
     catch {
         Write-Error $_
         Read-Host "הקש Enter לסגירה" | Out-Null
+    }
+}
+finally {
+    if ($script:mutexOwned -and $null -ne $script:singleInstanceMutex) {
+        try { $script:singleInstanceMutex.ReleaseMutex() } catch {}
+    }
+    if ($null -ne $script:singleInstanceMutex) {
+        $script:singleInstanceMutex.Dispose()
     }
 }
