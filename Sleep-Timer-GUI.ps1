@@ -78,6 +78,14 @@ public static class SleepTimerPower {
         $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         $scriptPathXml = [System.Security.SecurityElement]::Escape($script:scriptFilePath)
         $workingDirectoryXml = [System.Security.SecurityElement]::Escape((Split-Path -Parent $script:scriptFilePath))
+        $expectedArguments = '-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script:scriptFilePath + '" -AutoLaunch'
+        $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        if ($null -ne $existingTask) {
+            $existingAction = $existingTask.Actions | Select-Object -First 1
+            if ($null -ne $existingAction -and $existingAction.Execute -ieq 'powershell.exe' -and $existingAction.Arguments -eq $expectedArguments) {
+                return
+            }
+        }
         $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
