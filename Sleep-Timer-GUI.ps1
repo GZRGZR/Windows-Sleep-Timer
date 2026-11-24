@@ -183,9 +183,9 @@ public static class SleepTimerPower {
     # Main window
     $script:form = New-Object System.Windows.Forms.Form
     $script:form.Text = "טיימר שינה / כיבוי"
-    $script:form.Size = New-Object System.Drawing.Size(510, 780)
-    $script:form.MinimumSize = New-Object System.Drawing.Size(510, 780)
-    $script:form.MaximumSize = New-Object System.Drawing.Size(510, 780)
+    $script:form.Size = New-Object System.Drawing.Size(510, 710)
+    $script:form.MinimumSize = New-Object System.Drawing.Size(510, 710)
+    $script:form.MaximumSize = New-Object System.Drawing.Size(510, 710)
     $script:form.StartPosition = "CenterScreen"
     $script:form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
     $script:form.MaximizeBox = $false
@@ -219,7 +219,7 @@ public static class SleepTimerPower {
     # Settings view
     $script:settingsPanel = New-Object System.Windows.Forms.Panel
     $script:settingsPanel.Location = New-Object System.Drawing.Point(24, 98)
-    $script:settingsPanel.Size = New-Object System.Drawing.Size(450, 610)
+    $script:settingsPanel.Size = New-Object System.Drawing.Size(450, 560)
     $script:settingsPanel.BackColor = [System.Drawing.Color]::White
     $script:settingsPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
     $script:form.Controls.Add($script:settingsPanel)
@@ -241,27 +241,34 @@ public static class SleepTimerPower {
     $script:timeBox.RightToLeft = [System.Windows.Forms.RightToLeft]::No
     $script:settingsPanel.Controls.Add($script:timeBox)
 
-    $examples = New-Object System.Windows.Forms.Label
-    $examples.Text = "דוגמאות: 10 = עשר דקות     3.4 = 3:40     3.45 = 3:45"
-    $examples.Location = New-Object System.Drawing.Point(12, 91)
-    $examples.Size = New-Object System.Drawing.Size(424, 24)
-    $examples.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
-    $examples.ForeColor = [System.Drawing.Color]::FromArgb(75, 90, 110)
-    $examples.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $script:settingsPanel.Controls.Add($examples)
-
-    $rule = New-Object System.Windows.Forms.Label
-    $rule.Text = "עד 3.59 הסיומת נחשבת לשניות (3.59 = 3:59)." + [Environment]::NewLine + "מ-3.6 ומעלה מחשבים כחלקי דקה: 3.6 = 3:36; 3.75 = 3:45."
-    $rule.Location = New-Object System.Drawing.Point(12, 115)
-    $rule.Size = New-Object System.Drawing.Size(424, 34)
-    $rule.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
-    $rule.ForeColor = [System.Drawing.Color]::FromArgb(75, 90, 110)
-    $rule.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $script:settingsPanel.Controls.Add($rule)
+    $examplesInfo = New-Object System.Windows.Forms.Label
+    $examplesInfo.Text = "ⓘ"
+    $examplesInfo.Location = New-Object System.Drawing.Point(410, 91)
+    $examplesInfo.Size = New-Object System.Drawing.Size(26, 26)
+    $examplesInfo.Font = New-Object System.Drawing.Font("Segoe UI Symbol", 17, [System.Drawing.FontStyle]::Bold)
+    $examplesInfo.ForeColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
+    $examplesInfo.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $examplesInfo.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $script:settingsPanel.Controls.Add($examplesInfo)
+    $examplesInfo.Add_Click({
+        [System.Windows.Forms.MessageBox]::Show(
+            "דוגמאות להזנת זמן:" + [Environment]::NewLine +
+            "10 = עשר דקות" + [Environment]::NewLine +
+            "3.4 = 3 דקות ו-40 שניות" + [Environment]::NewLine +
+            "3.45 = 3 דקות ו-45 שניות" + [Environment]::NewLine +
+            "3.59 = 3 דקות ו-59 שניות" + [Environment]::NewLine +
+            "3.6 = 3 דקות ו-36 שניות" + [Environment]::NewLine +
+            "3.75 = 3 דקות ו-45 שניות" + [Environment]::NewLine + [Environment]::NewLine +
+            "עד 0.59 הסיומת מפורשת כשניות; מעל 0.59 היא מפורשת כחלק יחסי של דקה.",
+            "דוגמאות להזנת זמן",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+    })
 
     $actionLabel = New-Object System.Windows.Forms.Label
     $actionLabel.Text = "מה לבצע כשהטיימר מסתיים?"
-    $actionLabel.Location = New-Object System.Drawing.Point(18, 160)
+    $actionLabel.Location = New-Object System.Drawing.Point(18, 105)
     $actionLabel.Size = New-Object System.Drawing.Size(410, 24)
     $actionLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $actionLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
@@ -269,7 +276,7 @@ public static class SleepTimerPower {
 
     $script:sleepRadio = New-Object System.Windows.Forms.RadioButton
     $script:sleepRadio.Text = "שינה (ברירת מחדל)"
-    $script:sleepRadio.Location = New-Object System.Drawing.Point(230, 185)
+    $script:sleepRadio.Location = New-Object System.Drawing.Point(230, 130)
     $script:sleepRadio.Size = New-Object System.Drawing.Size(190, 25)
     $script:sleepRadio.Checked = $true
     $script:sleepRadio.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -277,14 +284,14 @@ public static class SleepTimerPower {
 
     $script:shutdownRadio = New-Object System.Windows.Forms.RadioButton
     $script:shutdownRadio.Text = "כיבוי"
-    $script:shutdownRadio.Location = New-Object System.Drawing.Point(65, 185)
+    $script:shutdownRadio.Location = New-Object System.Drawing.Point(65, 130)
     $script:shutdownRadio.Size = New-Object System.Drawing.Size(130, 25)
     $script:shutdownRadio.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $script:settingsPanel.Controls.Add($script:shutdownRadio)
 
     $script:shutdownWarning = New-Object System.Windows.Forms.Label
     $script:shutdownWarning.Text = "אזהרה: כיבוי עלול לסגור תוכנות ולגרום לאובדן נתונים שלא נשמרו!"
-    $script:shutdownWarning.Location = New-Object System.Drawing.Point(12, 211)
+    $script:shutdownWarning.Location = New-Object System.Drawing.Point(12, 155)
     $script:shutdownWarning.Size = New-Object System.Drawing.Size(424, 29)
     $script:shutdownWarning.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
     $script:shutdownWarning.ForeColor = [System.Drawing.Color]::FromArgb(180, 45, 35)
@@ -302,7 +309,7 @@ public static class SleepTimerPower {
 
     $script:topCheck = New-Object System.Windows.Forms.CheckBox
     $script:topCheck.Text = "הצג חלון מעל שאר החלונות בשלב הסיום"
-    $script:topCheck.Location = New-Object System.Drawing.Point(20, 246)
+    $script:topCheck.Location = New-Object System.Drawing.Point(20, 190)
     $script:topCheck.Size = New-Object System.Drawing.Size(410, 25)
     $script:topCheck.Checked = $true
     $script:topCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -310,7 +317,7 @@ public static class SleepTimerPower {
 
     $script:soundCheck = New-Object System.Windows.Forms.CheckBox
     $script:soundCheck.Text = "השמע צליל התראה 30 שניות לפני סיום הטיימר"
-    $script:soundCheck.Location = New-Object System.Drawing.Point(20, 273)
+    $script:soundCheck.Location = New-Object System.Drawing.Point(20, 217)
     $script:soundCheck.Size = New-Object System.Drawing.Size(410, 25)
     $script:soundCheck.Checked = $true
     $script:soundCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -318,7 +325,7 @@ public static class SleepTimerPower {
 
     $script:startButton = New-Object System.Windows.Forms.Button
     $script:startButton.Text = "התחל טיימר"
-    $script:startButton.Location = New-Object System.Drawing.Point(230, 570)
+    $script:startButton.Location = New-Object System.Drawing.Point(230, 520)
     $script:startButton.Size = New-Object System.Drawing.Size(176, 34)
     $script:startButton.BackColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
     $script:startButton.ForeColor = [System.Drawing.Color]::White
@@ -329,7 +336,7 @@ public static class SleepTimerPower {
 
     $closeButton = New-Object System.Windows.Forms.Button
     $closeButton.Text = "סגור ללא טיימר"
-    $closeButton.Location = New-Object System.Drawing.Point(40, 570)
+    $closeButton.Location = New-Object System.Drawing.Point(40, 520)
     $closeButton.Size = New-Object System.Drawing.Size(176, 34)
     $closeButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $script:settingsPanel.Controls.Add($closeButton)
@@ -430,7 +437,7 @@ public static class SleepTimerPower {
 
     $script:status = New-Object System.Windows.Forms.Label
     $script:status.Text = "הטיימר עדיין לא הופעל."
-    $script:status.Location = New-Object System.Drawing.Point(24, 713)
+    $script:status.Location = New-Object System.Drawing.Point(24, 660)
     $script:status.Size = New-Object System.Drawing.Size(450, 25)
     $script:status.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
     $script:status.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
@@ -438,7 +445,7 @@ public static class SleepTimerPower {
 
     $autoPromptLabel = New-Object System.Windows.Forms.Label
     $autoPromptLabel.Text = "פתיחה ושאלה אוטומטית:"
-    $autoPromptLabel.Location = New-Object System.Drawing.Point(18, 300)
+    $autoPromptLabel.Location = New-Object System.Drawing.Point(18, 242)
     $autoPromptLabel.Size = New-Object System.Drawing.Size(410, 24)
     $autoPromptLabel.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $autoPromptLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
@@ -446,21 +453,21 @@ public static class SleepTimerPower {
 
     $script:autoLogonCheck = New-Object System.Windows.Forms.CheckBox
     $script:autoLogonCheck.Text = "שאל אותי בכל כניסה ל-Windows (הדלקה/הפעלה מחדש)"
-    $script:autoLogonCheck.Location = New-Object System.Drawing.Point(20, 324)
+    $script:autoLogonCheck.Location = New-Object System.Drawing.Point(20, 266)
     $script:autoLogonCheck.Size = New-Object System.Drawing.Size(410, 24)
     $script:autoLogonCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $script:settingsPanel.Controls.Add($script:autoLogonCheck)
 
     $script:autoWakeCheck = New-Object System.Windows.Forms.CheckBox
     $script:autoWakeCheck.Text = "שאל אותי בכל התעוררות ממצב שינה"
-    $script:autoWakeCheck.Location = New-Object System.Drawing.Point(20, 350)
+    $script:autoWakeCheck.Location = New-Object System.Drawing.Point(20, 292)
     $script:autoWakeCheck.Size = New-Object System.Drawing.Size(410, 24)
     $script:autoWakeCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $script:settingsPanel.Controls.Add($script:autoWakeCheck)
 
     $autoPromptNote = New-Object System.Windows.Forms.Label
     $autoPromptNote.Text = "הסימון נשמר מיד. סגירה ב-X או 'סגור ללא טיימר' אינה מבטלת זאת."
-    $autoPromptNote.Location = New-Object System.Drawing.Point(12, 374)
+    $autoPromptNote.Location = New-Object System.Drawing.Point(12, 318)
     $autoPromptNote.Size = New-Object System.Drawing.Size(424, 22)
     $autoPromptNote.Font = New-Object System.Drawing.Font("Segoe UI", 8)
     $autoPromptNote.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
@@ -469,14 +476,14 @@ public static class SleepTimerPower {
 
     $script:scheduleEnabledCheck = New-Object System.Windows.Forms.CheckBox
     $script:scheduleEnabledCheck.Text = "הפעל תזכורות יומיות בשעות שנבחרו"
-    $script:scheduleEnabledCheck.Location = New-Object System.Drawing.Point(20, 402)
+    $script:scheduleEnabledCheck.Location = New-Object System.Drawing.Point(20, 348)
     $script:scheduleEnabledCheck.Size = New-Object System.Drawing.Size(410, 25)
     $script:scheduleEnabledCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
     $script:settingsPanel.Controls.Add($script:scheduleEnabledCheck)
 
     $scheduleTimeLabel = New-Object System.Windows.Forms.Label
     $scheduleTimeLabel.Text = "שעה:"
-    $scheduleTimeLabel.Location = New-Object System.Drawing.Point(290, 431)
+    $scheduleTimeLabel.Location = New-Object System.Drawing.Point(290, 377)
     $scheduleTimeLabel.Size = New-Object System.Drawing.Size(55, 26)
     $scheduleTimeLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $script:settingsPanel.Controls.Add($scheduleTimeLabel)
@@ -484,38 +491,51 @@ public static class SleepTimerPower {
     $script:scheduleTimePicker = New-Object System.Windows.Forms.DateTimePicker
     $script:scheduleTimePicker.Format = [System.Windows.Forms.DateTimePickerFormat]::Custom
     $script:scheduleTimePicker.CustomFormat = "HH:mm"
+    $script:scheduleTimePicker.RightToLeft = [System.Windows.Forms.RightToLeft]::No
+    $script:scheduleTimePicker.RightToLeftLayout = $false
     $script:scheduleTimePicker.ShowUpDown = $true
     $script:scheduleTimePicker.Value = (Get-Date).Date.AddHours(9)
-    $script:scheduleTimePicker.Location = New-Object System.Drawing.Point(205, 431)
+    $script:scheduleTimePicker.Location = New-Object System.Drawing.Point(205, 377)
     $script:scheduleTimePicker.Size = New-Object System.Drawing.Size(80, 27)
     $script:settingsPanel.Controls.Add($script:scheduleTimePicker)
 
     $script:addScheduleButton = New-Object System.Windows.Forms.Button
     $script:addScheduleButton.Text = "הוסף שעה"
-    $script:addScheduleButton.Location = New-Object System.Drawing.Point(45, 430)
+    $script:addScheduleButton.Location = New-Object System.Drawing.Point(45, 376)
     $script:addScheduleButton.Size = New-Object System.Drawing.Size(145, 29)
     $script:settingsPanel.Controls.Add($script:addScheduleButton)
 
     $script:scheduleTimesList = New-Object System.Windows.Forms.ListBox
-    $script:scheduleTimesList.Location = New-Object System.Drawing.Point(230, 465)
+    $script:scheduleTimesList.Location = New-Object System.Drawing.Point(230, 412)
     $script:scheduleTimesList.Size = New-Object System.Drawing.Size(190, 62)
     $script:scheduleTimesList.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $script:settingsPanel.Controls.Add($script:scheduleTimesList)
 
     $script:removeScheduleButton = New-Object System.Windows.Forms.Button
     $script:removeScheduleButton.Text = "הסר שעה נבחרת"
-    $script:removeScheduleButton.Location = New-Object System.Drawing.Point(45, 478)
+    $script:removeScheduleButton.Location = New-Object System.Drawing.Point(45, 420)
     $script:removeScheduleButton.Size = New-Object System.Drawing.Size(165, 30)
     $script:settingsPanel.Controls.Add($script:removeScheduleButton)
 
-    $scheduleNote = New-Object System.Windows.Forms.Label
-    $scheduleNote.Text = "בכל שעה שנבחרה תופיע ספירה של דקה עם אפשרות להוסיף 20 שניות. אם טיימר רגיל פועל באותה שעה, התזכורת תידלג."
-    $scheduleNote.Location = New-Object System.Drawing.Point(12, 534)
-    $scheduleNote.Size = New-Object System.Drawing.Size(424, 34)
-    $scheduleNote.Font = New-Object System.Drawing.Font("Segoe UI", 8)
-    $scheduleNote.ForeColor = [System.Drawing.Color]::FromArgb(75, 90, 110)
-    $scheduleNote.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $script:settingsPanel.Controls.Add($scheduleNote)
+    $scheduleInfo = New-Object System.Windows.Forms.Label
+    $scheduleInfo.Text = "ⓘ"
+    $scheduleInfo.Location = New-Object System.Drawing.Point(410, 480)
+    $scheduleInfo.Size = New-Object System.Drawing.Size(26, 26)
+    $scheduleInfo.Font = New-Object System.Drawing.Font("Segoe UI Symbol", 17, [System.Drawing.FontStyle]::Bold)
+    $scheduleInfo.ForeColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
+    $scheduleInfo.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $scheduleInfo.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $script:settingsPanel.Controls.Add($scheduleInfo)
+    $scheduleInfo.Add_Click({
+        [System.Windows.Forms.MessageBox]::Show(
+            "בכל שעה שנבחרה תופיע ספירה לאחור של דקה, עם אפשרות להוסיף 20 שניות." + [Environment]::NewLine + [Environment]::NewLine +
+            "אפשר ללחוץ על 'דלג הפעם' כדי לבטל רק את התזכורת הנוכחית; השעה תישאר שמורה לימים הבאים." + [Environment]::NewLine + [Environment]::NewLine +
+            "אם טיימר רגיל כבר פועל כשהשעה מגיעה, הוא מקבל עדיפות והתזכורת הקבועה תידלג.",
+            "מידע על תזכורות קבועות",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        ) | Out-Null
+    })
 
     $savedAutoSettings = Read-AutoPromptSettings
     $script:autoLogonCheck.Checked = [bool]$savedAutoSettings.LaunchAtLogon
@@ -571,8 +591,17 @@ public static class SleepTimerPower {
 
     $script:removeScheduleButton.Add_Click({
         if ($script:scheduleTimesList.SelectedIndex -ge 0) {
-            $script:scheduleTimesList.Items.RemoveAt($script:scheduleTimesList.SelectedIndex)
-            & $autoOptionsChanged
+            $selectedTime = [string]$script:scheduleTimesList.SelectedItem
+            $answer = [System.Windows.Forms.MessageBox]::Show(
+                "להסיר את השעה $selectedTime מרשימת התזכורות היומיות?",
+                "אישור הסרת שעה",
+                [System.Windows.Forms.MessageBoxButtons]::YesNo,
+                [System.Windows.Forms.MessageBoxIcon]::Question
+            )
+            if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
+                $script:scheduleTimesList.Items.RemoveAt($script:scheduleTimesList.SelectedIndex)
+                & $autoOptionsChanged
+            }
         }
         else {
             [System.Windows.Forms.MessageBox]::Show(
@@ -614,9 +643,9 @@ public static class SleepTimerPower {
         $script:addButton.Enabled = $true
         $script:form.TopMost = $false
 
-        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 780)
-        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 780)
-        $script:form.Size = New-Object System.Drawing.Size(510, 780)
+        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 710)
+        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 710)
+        $script:form.Size = New-Object System.Drawing.Size(510, 710)
         $screenArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
         $restoreX = $screenArea.Left + [int](($screenArea.Width - $script:form.Width) / 2)
         $restoreY = $screenArea.Top + [int](($screenArea.Height - $script:form.Height) / 2)
@@ -737,9 +766,9 @@ public static class SleepTimerPower {
             $script:clock.Stop()
             $script:timerRunning = $false
             $script:form.TopMost = $false
-            $script:form.MinimumSize = New-Object System.Drawing.Size(510, 780)
-            $script:form.MaximumSize = New-Object System.Drawing.Size(510, 780)
-            $script:form.Size = New-Object System.Drawing.Size(510, 780)
+            $script:form.MinimumSize = New-Object System.Drawing.Size(510, 710)
+            $script:form.MaximumSize = New-Object System.Drawing.Size(510, 710)
+            $script:form.Size = New-Object System.Drawing.Size(510, 710)
             $script:header.Visible = $true
             $script:status.Visible = $true
             $script:settingsPanel.Visible = $true
