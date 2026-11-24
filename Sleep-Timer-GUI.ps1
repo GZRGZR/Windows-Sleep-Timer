@@ -1,4 +1,4 @@
-﻿param([switch]$AutoLaunch)
+﻿param([switch]$AutoLaunch, [switch]$AutoReminder, [string]$ScheduledTime)
 $ErrorActionPreference = 'Stop'
 
 try {
@@ -62,29 +62,32 @@ public static class SleepTimerPower {
     }
 
     function script:Read-AutoPromptSettings {
-        $settings = @{ LaunchAtLogon = $true; LaunchOnWake = $true }
+        $settings = @{ LaunchAtLogon = $true; LaunchOnWake = $true; ScheduledRemindersEnabled = $false; ScheduledTimes = @() }
         if (Test-Path -LiteralPath $script:autoSettingsPath) {
             try {
                 $saved = Get-Content -LiteralPath $script:autoSettingsPath -Raw | ConvertFrom-Json
                 if ($null -ne $saved.LaunchAtLogon) { $settings.LaunchAtLogon = [bool]$saved.LaunchAtLogon }
                 if ($null -ne $saved.LaunchOnWake) { $settings.LaunchOnWake = [bool]$saved.LaunchOnWake }
+                if ($null -ne $saved.ScheduledRemindersEnabled) { $settings.ScheduledRemindersEnabled = [bool]$saved.ScheduledRemindersEnabled }
+                if ($null -ne $saved.ScheduledTimes) {
+                    $settings.ScheduledTimes = @($saved.ScheduledTimes | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^([01]\d|2[0-3]):[0-5]\d$' } | Sort-Object -Unique)
+                }
             }
             catch { }
         }
         return $settings
     }
 
-    function script:Register-AutoPromptTask([string]$taskName, [string]$triggerXml) {
+    function script:Register-AutoPromptTask([string]$taskName, [string]$triggerXml, [string]$arguments = "-AutoLaunch") {
         $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         $scriptPathXml = [System.Security.SecurityElement]::Escape($script:scriptFilePath)
         $workingDirectoryXml = [System.Security.SecurityElement]::Escape((Split-Path -Parent $script:scriptFilePath))
-        $expectedArguments = '-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script:scriptFilePath + '" -AutoLaunch'
+        $expectedArguments = '-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script:scriptFilePath + '" ' + $arguments
+        $argumentsXml = [System.Security.SecurityElement]::Escape($arguments)
         $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         if ($null -ne $existingTask) {
             $existingAction = $existingTask.Actions | Select-Object -First 1
-            if ($null -ne $existingAction -and $existingAction.Execute -ieq 'powershell.exe' -and $existingAction.Arguments -eq $expectedArguments) {
-                return
-            }
+            if ($null -ne $existingAction -and $existingAction.Execute -ieq 'powershell.exe' -and $existingAction.Arguments -eq $expectedArguments) { return }
         }
         $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -92,24 +95,18 @@ public static class SleepTimerPower {
   <RegistrationInfo><Description>פתיחת טיימר שינה/כיבוי בחשבון המשתמש הנוכחי.</Description></RegistrationInfo>
   <Triggers>$triggerXml</Triggers>
   <Principals>
-    <Principal id="Author">
-      <UserId>$sid</UserId>
-      <LogonType>InteractiveToken</LogonType>
-      <RunLevel>LeastPrivilege</RunLevel>
-    </Principal>
+    <Principal id="Author"><UserId>$sid</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal>
   </Principals>
   <Settings>
     <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
     <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <StartWhenAvailable>true</StartWhenAvailable>
-    <Enabled>true</Enabled><Hidden>false</Hidden>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority>
+    <Enabled>true</Enabled><Hidden>false</Hidden><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority>
   </Settings>
   <Actions Context="Author">
-    <Exec>
-      <Command>powershell.exe</Command>
-      <Arguments>-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File &quot;$scriptPathXml&quot; -AutoLaunch</Arguments>
+    <Exec><Command>powershell.exe</Command>
+      <Arguments>-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File &quot;$scriptPathXml&quot; $argumentsXml</Arguments>
       <WorkingDirectory>$workingDirectoryXml</WorkingDirectory>
     </Exec>
   </Actions>
@@ -122,29 +119,48 @@ public static class SleepTimerPower {
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
     }
 
-    function script:Apply-AutoPromptSettings([bool]$launchAtLogon, [bool]$launchOnWake) {
+    function script:Apply-AutoPromptSettings(
+        [bool]$launchAtLogon,
+        [bool]$launchOnWake,
+        [bool]$scheduledRemindersEnabled,
+        [string[]]$scheduledTimes
+    ) {
         $folder = Split-Path -Parent $script:autoSettingsPath
         if (-not (Test-Path -LiteralPath $folder)) { New-Item -ItemType Directory -Path $folder -Force | Out-Null }
-
         if ($launchAtLogon) {
             $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
             $logonTrigger = '<LogonTrigger><Enabled>true</Enabled><UserId>' + $sid + '</UserId></LogonTrigger>'
             Register-AutoPromptTask -taskName 'WindowsSleepTimer-AtLogon' -triggerXml $logonTrigger
-        } else {
-            Remove-AutoPromptTask -taskName 'WindowsSleepTimer-AtLogon'
-        }
-
+        } else { Remove-AutoPromptTask -taskName 'WindowsSleepTimer-AtLogon' }
         if ($launchOnWake) {
             $subscription = '<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name=''Microsoft-Windows-Power-Troubleshooter''] and EventID=1]]</Select></Query></QueryList>'
             $escapedSubscription = [System.Security.SecurityElement]::Escape($subscription)
             $wakeTrigger = '<EventTrigger><Enabled>true</Enabled><Subscription>' + $escapedSubscription + '</Subscription><Delay>PT2S</Delay></EventTrigger>'
             Register-AutoPromptTask -taskName 'WindowsSleepTimer-AtWake' -triggerXml $wakeTrigger
-        } else {
-            Remove-AutoPromptTask -taskName 'WindowsSleepTimer-AtWake'
-        }
+        } else { Remove-AutoPromptTask -taskName 'WindowsSleepTimer-AtWake' }
 
-        @{ LaunchAtLogon = $launchAtLogon; LaunchOnWake = $launchOnWake } |
-            ConvertTo-Json | Set-Content -LiteralPath $script:autoSettingsPath -Encoding UTF8
+        $validTimes = @($scheduledTimes | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^([01]\d|2[0-3]):[0-5]\d$' } | Sort-Object -Unique)
+        $desiredReminderTasks = @{}
+        if ($scheduledRemindersEnabled) {
+            foreach ($time in $validTimes) {
+                $parts = $time.Split(':')
+                $taskName = 'WindowsSleepTimer-Reminder-' + $time.Replace(':', '')
+                $desiredReminderTasks[$taskName] = $true
+                $startBoundary = (Get-Date).Date.AddHours([int]$parts[0]).AddMinutes([int]$parts[1]).ToString("yyyy-MM-ddTHH:mm:ss", [Globalization.CultureInfo]::InvariantCulture)
+                $dailyTrigger = '<CalendarTrigger><StartBoundary>' + $startBoundary + '</StartBoundary><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>'
+                Register-AutoPromptTask -taskName $taskName -triggerXml $dailyTrigger -arguments ("-AutoReminder -ScheduledTime " + $time)
+            }
+        }
+        Get-ScheduledTask -ErrorAction SilentlyContinue |
+            Where-Object { $_.TaskName -like 'WindowsSleepTimer-Reminder-*' -and -not $desiredReminderTasks.ContainsKey($_.TaskName) } |
+            ForEach-Object { Unregister-ScheduledTask -TaskName $_.TaskName -Confirm:$false -ErrorAction SilentlyContinue }
+
+        @{
+            LaunchAtLogon = $launchAtLogon
+            LaunchOnWake = $launchOnWake
+            ScheduledRemindersEnabled = $scheduledRemindersEnabled
+            ScheduledTimes = $validTimes
+        } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $script:autoSettingsPath -Encoding UTF8
     }
 
     # State and controls are script-scoped so the event callbacks always see them.
@@ -158,13 +174,18 @@ public static class SleepTimerPower {
     $script:selectedAction = "sleep"
     $script:autoSettingsPath = Join-Path $env:LOCALAPPDATA "WindowsSleepTimer\autostart.json"
     $script:autoSettingsBusy = $false
+    $script:scheduledTimes = @()
+    $script:scheduleRemindersEnabled = $false
+    $script:handledScheduledPrompts = @{}
+    $script:isScheduledReminder = $false
+    $script:startingScheduledReminder = $false
 
     # Main window
     $script:form = New-Object System.Windows.Forms.Form
     $script:form.Text = "טיימר שינה / כיבוי"
-    $script:form.Size = New-Object System.Drawing.Size(510, 610)
-    $script:form.MinimumSize = New-Object System.Drawing.Size(510, 610)
-    $script:form.MaximumSize = New-Object System.Drawing.Size(510, 610)
+    $script:form.Size = New-Object System.Drawing.Size(510, 700)
+    $script:form.MinimumSize = New-Object System.Drawing.Size(510, 700)
+    $script:form.MaximumSize = New-Object System.Drawing.Size(510, 700)
     $script:form.StartPosition = "CenterScreen"
     $script:form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
     $script:form.MaximizeBox = $false
@@ -198,7 +219,7 @@ public static class SleepTimerPower {
     # Settings view
     $script:settingsPanel = New-Object System.Windows.Forms.Panel
     $script:settingsPanel.Location = New-Object System.Drawing.Point(24, 98)
-    $script:settingsPanel.Size = New-Object System.Drawing.Size(450, 440)
+    $script:settingsPanel.Size = New-Object System.Drawing.Size(450, 535)
     $script:settingsPanel.BackColor = [System.Drawing.Color]::White
     $script:settingsPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
     $script:form.Controls.Add($script:settingsPanel)
@@ -297,7 +318,7 @@ public static class SleepTimerPower {
 
     $script:startButton = New-Object System.Windows.Forms.Button
     $script:startButton.Text = "התחל טיימר"
-    $script:startButton.Location = New-Object System.Drawing.Point(230, 398)
+    $script:startButton.Location = New-Object System.Drawing.Point(230, 590)
     $script:startButton.Size = New-Object System.Drawing.Size(176, 34)
     $script:startButton.BackColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
     $script:startButton.ForeColor = [System.Drawing.Color]::White
@@ -308,7 +329,7 @@ public static class SleepTimerPower {
 
     $closeButton = New-Object System.Windows.Forms.Button
     $closeButton.Text = "סגור ללא טיימר"
-    $closeButton.Location = New-Object System.Drawing.Point(40, 398)
+    $closeButton.Location = New-Object System.Drawing.Point(40, 590)
     $closeButton.Size = New-Object System.Drawing.Size(176, 34)
     $closeButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $script:settingsPanel.Controls.Add($closeButton)
@@ -409,7 +430,7 @@ public static class SleepTimerPower {
 
     $script:status = New-Object System.Windows.Forms.Label
     $script:status.Text = "הטיימר עדיין לא הופעל."
-    $script:status.Location = New-Object System.Drawing.Point(24, 545)
+    $script:status.Location = New-Object System.Drawing.Point(24, 642)
     $script:status.Size = New-Object System.Drawing.Size(450, 25)
     $script:status.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
     $script:status.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
@@ -446,25 +467,84 @@ public static class SleepTimerPower {
     $autoPromptNote.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $script:settingsPanel.Controls.Add($autoPromptNote)
 
+    $script:scheduleEnabledCheck = New-Object System.Windows.Forms.CheckBox
+    $script:scheduleEnabledCheck.Text = "הפעל תזכורות יומיות בשעות שנבחרו"
+    $script:scheduleEnabledCheck.Location = New-Object System.Drawing.Point(20, 402)
+    $script:scheduleEnabledCheck.Size = New-Object System.Drawing.Size(410, 25)
+    $script:scheduleEnabledCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $script:settingsPanel.Controls.Add($script:scheduleEnabledCheck)
+
+    $scheduleTimeLabel = New-Object System.Windows.Forms.Label
+    $scheduleTimeLabel.Text = "שעה:"
+    $scheduleTimeLabel.Location = New-Object System.Drawing.Point(290, 431)
+    $scheduleTimeLabel.Size = New-Object System.Drawing.Size(55, 26)
+    $scheduleTimeLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:settingsPanel.Controls.Add($scheduleTimeLabel)
+
+    $script:scheduleTimePicker = New-Object System.Windows.Forms.DateTimePicker
+    $script:scheduleTimePicker.Format = [System.Windows.Forms.DateTimePickerFormat]::Custom
+    $script:scheduleTimePicker.CustomFormat = "HH:mm"
+    $script:scheduleTimePicker.ShowUpDown = $true
+    $script:scheduleTimePicker.Value = (Get-Date).Date.AddHours(9)
+    $script:scheduleTimePicker.Location = New-Object System.Drawing.Point(205, 431)
+    $script:scheduleTimePicker.Size = New-Object System.Drawing.Size(80, 27)
+    $script:settingsPanel.Controls.Add($script:scheduleTimePicker)
+
+    $script:addScheduleButton = New-Object System.Windows.Forms.Button
+    $script:addScheduleButton.Text = "הוסף שעה"
+    $script:addScheduleButton.Location = New-Object System.Drawing.Point(45, 430)
+    $script:addScheduleButton.Size = New-Object System.Drawing.Size(145, 29)
+    $script:settingsPanel.Controls.Add($script:addScheduleButton)
+
+    $script:scheduleTimesList = New-Object System.Windows.Forms.ListBox
+    $script:scheduleTimesList.Location = New-Object System.Drawing.Point(230, 465)
+    $script:scheduleTimesList.Size = New-Object System.Drawing.Size(190, 62)
+    $script:scheduleTimesList.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:settingsPanel.Controls.Add($script:scheduleTimesList)
+
+    $script:removeScheduleButton = New-Object System.Windows.Forms.Button
+    $script:removeScheduleButton.Text = "הסר שעה נבחרת"
+    $script:removeScheduleButton.Location = New-Object System.Drawing.Point(45, 478)
+    $script:removeScheduleButton.Size = New-Object System.Drawing.Size(165, 30)
+    $script:settingsPanel.Controls.Add($script:removeScheduleButton)
+
+    $scheduleNote = New-Object System.Windows.Forms.Label
+    $scheduleNote.Text = "בכל שעה שנבחרה תופיע ספירה של דקה עם אפשרות להוסיף 20 שניות. אם טיימר רגיל פועל באותה שעה, התזכורת תידלג."
+    $scheduleNote.Location = New-Object System.Drawing.Point(12, 534)
+    $scheduleNote.Size = New-Object System.Drawing.Size(424, 45)
+    $scheduleNote.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $scheduleNote.ForeColor = [System.Drawing.Color]::FromArgb(75, 90, 110)
+    $scheduleNote.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $script:settingsPanel.Controls.Add($scheduleNote)
+
     $savedAutoSettings = Read-AutoPromptSettings
     $script:autoLogonCheck.Checked = [bool]$savedAutoSettings.LaunchAtLogon
     $script:autoWakeCheck.Checked = [bool]$savedAutoSettings.LaunchOnWake
+    $script:scheduleRemindersEnabled = [bool]$savedAutoSettings.ScheduledRemindersEnabled
+    $script:scheduledTimes = @($savedAutoSettings.ScheduledTimes)
+    foreach ($time in $script:scheduledTimes) {
+        if ($time -match '^([01]\d|2[0-3]):[0-5]\d$' -and -not $script:scheduleTimesList.Items.Contains($time)) {
+            [void]$script:scheduleTimesList.Items.Add($time)
+        }
+    }
+    $script:scheduleEnabledCheck.Checked = $script:scheduleRemindersEnabled
 
     $autoOptionsChanged = {
         if ($script:autoSettingsBusy) { return }
         $script:autoSettingsBusy = $true
         try {
-            Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked
-            $script:status.Text = "הגדרות הפתיחה האוטומטית נשמרו."
+            $times = @()
+            foreach ($item in $script:scheduleTimesList.Items) { $times += [string]$item }
+            $script:scheduledTimes = @($times | Sort-Object -Unique)
+            $script:scheduleRemindersEnabled = $script:scheduleEnabledCheck.Checked
+            Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked -scheduledRemindersEnabled $script:scheduleRemindersEnabled -scheduledTimes $script:scheduledTimes
+            $script:status.Text = "הגדרות הפתיחה והתזכורות נשמרו."
         }
         catch {
-            $script:autoLogonCheck.Checked = $false
-            $script:autoWakeCheck.Checked = $false
-            try { Apply-AutoPromptSettings -launchAtLogon $false -launchOnWake $false } catch {}
-            $script:status.Text = "לא ניתן להגדיר פתיחה אוטומטית."
+            $script:status.Text = "לא ניתן לשמור את ההגדרות האוטומטיות."
             [System.Windows.Forms.MessageBox]::Show(
-                "Windows לא הצליח לשמור את ההגדרה. אפשר להמשיך להשתמש בטיימר כרגיל." + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message,
-                "הגדרות פתיחה אוטומטית",
+                "Windows לא הצליח לשמור את אחת ממשימות התזמון. אפשר להמשיך להשתמש בטיימר כרגיל." + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message,
+                "הגדרות אוטומטיות",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Warning
             ) | Out-Null
@@ -473,22 +553,47 @@ public static class SleepTimerPower {
             $script:autoSettingsBusy = $false
         }
     }
+
     $script:autoLogonCheck.Add_CheckedChanged($autoOptionsChanged)
     $script:autoWakeCheck.Add_CheckedChanged($autoOptionsChanged)
+    $script:scheduleEnabledCheck.Add_CheckedChanged($autoOptionsChanged)
+
+    $script:addScheduleButton.Add_Click({
+        $newTime = $script:scheduleTimePicker.Value.ToString("HH:mm")
+        if (-not $script:scheduleTimesList.Items.Contains($newTime)) {
+            [void]$script:scheduleTimesList.Items.Add($newTime)
+            $sorted = @($script:scheduleTimesList.Items | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+            $script:scheduleTimesList.Items.Clear()
+            foreach ($time in $sorted) { [void]$script:scheduleTimesList.Items.Add($time) }
+            & $autoOptionsChanged
+        }
+    })
+
+    $script:removeScheduleButton.Add_Click({
+        if ($script:scheduleTimesList.SelectedIndex -ge 0) {
+            $script:scheduleTimesList.Items.RemoveAt($script:scheduleTimesList.SelectedIndex)
+            & $autoOptionsChanged
+        }
+        else {
+            [System.Windows.Forms.MessageBox]::Show(
+                "בחר שעה מהרשימה שאותה תרצה להסיר.",
+                "הסרת שעה",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            ) | Out-Null
+        }
+    })
 
     $script:autoSettingsBusy = $true
     try {
-        Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked
-        $script:status.Text = "הגדרות הפתיחה האוטומטית פעילות לפי הסימונים."
+        Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked -scheduledRemindersEnabled $script:scheduleRemindersEnabled -scheduledTimes $script:scheduledTimes
+        $script:status.Text = "ההגדרות האוטומטיות פעילות לפי הסימונים."
     }
     catch {
-        $script:autoLogonCheck.Checked = $false
-        $script:autoWakeCheck.Checked = $false
-        try { Apply-AutoPromptSettings -launchAtLogon $false -launchOnWake $false } catch {}
-        $script:status.Text = "פתיחה אוטומטית לא הוגדרה; ניתן להשתמש בטיימר כרגיל."
+        $script:status.Text = "לא ניתן להגדיר חלק מהפעולות האוטומטיות; ניתן להשתמש בטיימר כרגיל."
         [System.Windows.Forms.MessageBox]::Show(
-            "לא ניתן לרשום את משימות ההפעלה האוטומטית ב-Windows. שאר אפשרויות הטיימר זמינות כרגיל." + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message,
-            "הגדרות פתיחה אוטומטית",
+            "Windows לא הצליח לרשום את משימות התזמון. אפשר להמשיך להשתמש בטיימר כרגיל." + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message,
+            "הגדרות אוטומטיות",
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Warning
         ) | Out-Null
@@ -509,9 +614,9 @@ public static class SleepTimerPower {
         $script:addButton.Enabled = $true
         $script:form.TopMost = $false
 
-        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 610)
-        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 610)
-        $script:form.Size = New-Object System.Drawing.Size(510, 610)
+        $script:form.MinimumSize = New-Object System.Drawing.Size(510, 700)
+        $script:form.MaximumSize = New-Object System.Drawing.Size(510, 700)
+        $script:form.Size = New-Object System.Drawing.Size(510, 700)
         $screenArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
         $restoreX = $screenArea.Left + [int](($screenArea.Width - $script:form.Width) / 2)
         $restoreY = $screenArea.Top + [int](($screenArea.Height - $script:form.Height) / 2)
@@ -632,9 +737,9 @@ public static class SleepTimerPower {
             $script:clock.Stop()
             $script:timerRunning = $false
             $script:form.TopMost = $false
-            $script:form.MinimumSize = New-Object System.Drawing.Size(510, 610)
-            $script:form.MaximumSize = New-Object System.Drawing.Size(510, 610)
-            $script:form.Size = New-Object System.Drawing.Size(510, 610)
+            $script:form.MinimumSize = New-Object System.Drawing.Size(510, 700)
+            $script:form.MaximumSize = New-Object System.Drawing.Size(510, 700)
+            $script:form.Size = New-Object System.Drawing.Size(510, 700)
             $script:header.Visible = $true
             $script:status.Visible = $true
             $script:settingsPanel.Visible = $true
@@ -663,6 +768,8 @@ public static class SleepTimerPower {
 
     $script:startButton.Add_Click({
         try {
+            $script:isScheduledReminder = $script:startingScheduledReminder
+            $script:startingScheduledReminder = $false
             $seconds = Convert-TimeInput $script:timeBox.Text
             $script:remainingSeconds = $seconds
             $script:initialDurationSeconds = $seconds
@@ -676,7 +783,11 @@ public static class SleepTimerPower {
             $script:form.TopMost = $false
             $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
             $script:countLabel.Text = Format-Remaining $seconds
-            if ($script:shutdownRadio.Checked) {
+            if ($script:isScheduledReminder) {
+                $script:selectedAction = "sleep"
+                $script:countTitle.Text = "תזכורת קבועה – דקה עד למצב שינה"
+            }
+            elseif ($script:shutdownRadio.Checked) {
                 $script:selectedAction = "shutdown"
                 $script:countTitle.Text = "הזמן שנותר עד לכיבוי המחשב"
             }
@@ -709,9 +820,19 @@ public static class SleepTimerPower {
             $script:detailsLabel.Size = New-Object System.Drawing.Size(334, 24)
             $script:limitLabel.Location = New-Object System.Drawing.Point(10, 151)
             $script:limitLabel.Size = New-Object System.Drawing.Size(334, 22)
-            $script:addButton.Location = New-Object System.Drawing.Point(104, 112)
-            $script:addButton.Size = New-Object System.Drawing.Size(150, 35)
-            $script:cancelButton.Visible = $false
+            if ($script:isScheduledReminder) {
+                $script:cancelButton.Text = "דלג הפעם"
+                $script:cancelButton.Location = New-Object System.Drawing.Point(14, 112)
+                $script:cancelButton.Size = New-Object System.Drawing.Size(100, 35)
+                $script:cancelButton.Visible = $true
+                $script:addButton.Location = New-Object System.Drawing.Point(122, 112)
+                $script:addButton.Size = New-Object System.Drawing.Size(220, 35)
+            }
+            else {
+                $script:cancelButton.Visible = $false
+                $script:addButton.Location = New-Object System.Drawing.Point(104, 112)
+                $script:addButton.Size = New-Object System.Drawing.Size(150, 35)
+            }
 
             $script:status.Text = "הטיימר פועל."
             $script:clock.Start()
@@ -723,6 +844,42 @@ public static class SleepTimerPower {
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Warning
             ) | Out-Null
+        }
+    })
+
+    function script:Start-ScheduledReminder([string]$time) {
+        if ($script:timerRunning) { return }
+        $today = Get-Date
+        $key = $today.ToString("yyyyMMdd") + "-" + $time.Replace(":", "")
+        if ($script:handledScheduledPrompts.ContainsKey($key)) { return }
+        $script:handledScheduledPrompts[$key] = $true
+        $script:startingScheduledReminder = $true
+        $script:timeBox.Text = "1"
+        $script:startButton.PerformClick()
+    }
+
+    $script:scheduleWatcher = New-Object System.Windows.Forms.Timer
+    $script:scheduleWatcher.Interval = 1000
+    $script:scheduleWatcher.Add_Tick({
+        if (-not $script:scheduleRemindersEnabled -or $script:scheduledTimes.Count -eq 0) { return }
+        $now = Get-Date
+        foreach ($time in $script:scheduledTimes) {
+            try {
+                $parts = $time.Split(':')
+                $due = $now.Date.AddHours([int]$parts[0]).AddMinutes([int]$parts[1])
+                $key = $due.ToString("yyyyMMdd") + "-" + $time.Replace(":", "")
+                if ($script:handledScheduledPrompts.ContainsKey($key)) { continue }
+                if ($now -ge $due -and $now -lt $due.AddMinutes(1)) {
+                    if ($script:timerRunning) {
+                        # An existing timer takes priority; skip this scheduled occurrence.
+                        $script:handledScheduledPrompts[$key] = $true
+                        continue
+                    }
+                    Start-ScheduledReminder $time
+                    return
+                }
+            }
+            catch { }
         }
     })
 
@@ -761,16 +918,41 @@ public static class SleepTimerPower {
         }
     })
 
-    $script:cancelButton.Add_Click({ Return-ToSettings })
+    $script:cancelButton.Add_Click({
+        if ($script:isScheduledReminder) {
+            $script:clock.Stop()
+            $script:timerRunning = $false
+            $script:isScheduledReminder = $false
+            $script:form.TopMost = $false
+            $script:status.Text = "התזכורת דולגה הפעם. התזמון הקבוע נשמר."
+            $script:form.Close()
+        }
+        else { Return-ToSettings }
+    })
 
 $closeButton.Add_Click({ $script:form.Close() })
 
     $script:form.Add_FormClosing({
+        $script:scheduleWatcher.Stop()
         if ($script:timerRunning) {
             $script:clock.Stop()
             $script:timerRunning = $false
         }
     })
+
+    $script:scheduleWatcher.Start()
+
+    if ($AutoReminder) {
+        if (-not $script:scheduleRemindersEnabled -or $script:scheduledTimes -notcontains $ScheduledTime) { return }
+        try {
+            $now = Get-Date
+            $parts = $ScheduledTime.Split(':')
+            $due = $now.Date.AddHours([int]$parts[0]).AddMinutes([int]$parts[1])
+            if ($now -lt $due -or $now -ge $due.AddMinutes(1)) { return }
+            Start-ScheduledReminder $ScheduledTime
+        }
+        catch { return }
+    }
 
     [void]$script:form.ShowDialog()
 }
