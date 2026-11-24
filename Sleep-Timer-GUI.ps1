@@ -245,7 +245,7 @@ public static class SleepTimerPower {
     $script:settingsPanel.Controls.Add($script:timeBox)
 
     $script:infoToolTip = New-Object System.Windows.Forms.ToolTip
-    $script:infoToolTip.InitialDelay = 350
+    $script:infoToolTip.InitialDelay = 100
     $script:infoToolTip.ReshowDelay = 100
     $script:infoToolTip.AutoPopDelay = 20000
     $script:infoToolTip.ShowAlways = $true
@@ -257,7 +257,7 @@ public static class SleepTimerPower {
     $examplesInfo.Font = New-Object System.Drawing.Font("Segoe UI Symbol", 17, [System.Drawing.FontStyle]::Bold)
     $examplesInfo.ForeColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
     $examplesInfo.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $examplesInfo.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $examplesInfo.Cursor = [System.Windows.Forms.Cursors]::Help
     $script:settingsPanel.Controls.Add($examplesInfo)
     $script:infoToolTip.SetToolTip(
         $examplesInfo,
@@ -471,7 +471,7 @@ public static class SleepTimerPower {
     $script:settingsPanel.Controls.Add($script:autoWakeCheck)
 
     $script:loginPromptTopMostCheck = New-Object System.Windows.Forms.CheckBox
-    $script:loginPromptTopMostCheck.Text = "הצג חלון בחירת הזמן מעל כל החלונות בעת כניסה ל-Windows"
+    $script:loginPromptTopMostCheck.Text = "בכניסה ל-Windows, הצג חלון בחירת זמן מעל כל החלונות"
     $script:loginPromptTopMostCheck.Location = New-Object System.Drawing.Point(20, 318)
     $script:loginPromptTopMostCheck.Size = New-Object System.Drawing.Size(410, 24)
     $script:loginPromptTopMostCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -565,7 +565,7 @@ public static class SleepTimerPower {
     $scheduleInfo.Font = New-Object System.Drawing.Font("Segoe UI Symbol", 17, [System.Drawing.FontStyle]::Bold)
     $scheduleInfo.ForeColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
     $scheduleInfo.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-    $scheduleInfo.Cursor = [System.Windows.Forms.Cursors]::Hand
+    $scheduleInfo.Cursor = [System.Windows.Forms.Cursors]::Help
     $script:settingsPanel.Controls.Add($scheduleInfo)
     $script:infoToolTip.SetToolTip(
         $scheduleInfo,
@@ -584,6 +584,7 @@ public static class SleepTimerPower {
     $script:lowerWindowButton.Add_Click({
         $script:form.TopMost = $false
         $script:lowerWindowButton.Visible = $false
+        $script:form.SendToBack()
         $script:status.Text = "חלון בחירת הזמן הועבר מתחת לחלונות אחרים."
     })
 
