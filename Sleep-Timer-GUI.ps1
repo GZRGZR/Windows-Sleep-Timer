@@ -1,4 +1,4 @@
-﻿param([switch]$AutoLaunch, [switch]$AutoReminder, [string]$ScheduledTime)
+﻿param([switch]$AutoLaunch, [switch]$AutoReminder, [string]$ScheduledTime, [switch]$WakeLaunch)
 $ErrorActionPreference = 'Stop'
 
 try {
@@ -62,12 +62,13 @@ public static class SleepTimerPower {
     }
 
     function script:Read-AutoPromptSettings {
-        $settings = @{ LaunchAtLogon = $true; LaunchOnWake = $true; ScheduledRemindersEnabled = $false; ScheduledTimes = @() }
+        $settings = @{ LaunchAtLogon = $true; LaunchOnWake = $true; LoginPromptTopMost = $false; ScheduledRemindersEnabled = $false; ScheduledTimes = @() }
         if (Test-Path -LiteralPath $script:autoSettingsPath) {
             try {
                 $saved = Get-Content -LiteralPath $script:autoSettingsPath -Raw | ConvertFrom-Json
                 if ($null -ne $saved.LaunchAtLogon) { $settings.LaunchAtLogon = [bool]$saved.LaunchAtLogon }
                 if ($null -ne $saved.LaunchOnWake) { $settings.LaunchOnWake = [bool]$saved.LaunchOnWake }
+                if ($null -ne $saved.LoginPromptTopMost) { $settings.LoginPromptTopMost = [bool]$saved.LoginPromptTopMost }
                 if ($null -ne $saved.ScheduledRemindersEnabled) { $settings.ScheduledRemindersEnabled = [bool]$saved.ScheduledRemindersEnabled }
                 if ($null -ne $saved.ScheduledTimes) {
                     $settings.ScheduledTimes = @($saved.ScheduledTimes | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^([01]\d|2[0-3]):[0-5]\d$' } | Sort-Object -Unique)
@@ -122,6 +123,7 @@ public static class SleepTimerPower {
     function script:Apply-AutoPromptSettings(
         [bool]$launchAtLogon,
         [bool]$launchOnWake,
+        [bool]$loginPromptTopMost,
         [bool]$scheduledRemindersEnabled,
         [string[]]$scheduledTimes
     ) {
@@ -136,7 +138,7 @@ public static class SleepTimerPower {
             $subscription = '<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name=''Microsoft-Windows-Power-Troubleshooter''] and EventID=1]]</Select></Query></QueryList>'
             $escapedSubscription = [System.Security.SecurityElement]::Escape($subscription)
             $wakeTrigger = '<EventTrigger><Enabled>true</Enabled><Subscription>' + $escapedSubscription + '</Subscription><Delay>PT2S</Delay></EventTrigger>'
-            Register-AutoPromptTask -taskName 'WindowsSleepTimer-AtWake' -triggerXml $wakeTrigger
+            Register-AutoPromptTask -taskName 'WindowsSleepTimer-AtWake' -triggerXml $wakeTrigger -arguments '-AutoLaunch -WakeLaunch'
         } else { Remove-AutoPromptTask -taskName 'WindowsSleepTimer-AtWake' }
 
         $validTimes = @($scheduledTimes | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^([01]\d|2[0-3]):[0-5]\d$' } | Sort-Object -Unique)
@@ -158,6 +160,7 @@ public static class SleepTimerPower {
         @{
             LaunchAtLogon = $launchAtLogon
             LaunchOnWake = $launchOnWake
+            LoginPromptTopMost = $loginPromptTopMost
             ScheduledRemindersEnabled = $scheduledRemindersEnabled
             ScheduledTimes = $validTimes
         } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $script:autoSettingsPath -Encoding UTF8
@@ -241,6 +244,12 @@ public static class SleepTimerPower {
     $script:timeBox.RightToLeft = [System.Windows.Forms.RightToLeft]::No
     $script:settingsPanel.Controls.Add($script:timeBox)
 
+    $script:infoToolTip = New-Object System.Windows.Forms.ToolTip
+    $script:infoToolTip.InitialDelay = 350
+    $script:infoToolTip.ReshowDelay = 100
+    $script:infoToolTip.AutoPopDelay = 20000
+    $script:infoToolTip.ShowAlways = $true
+
     $examplesInfo = New-Object System.Windows.Forms.Label
     $examplesInfo.Text = "ⓘ"
     $examplesInfo.Location = New-Object System.Drawing.Point(410, 91)
@@ -250,21 +259,17 @@ public static class SleepTimerPower {
     $examplesInfo.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $examplesInfo.Cursor = [System.Windows.Forms.Cursors]::Hand
     $script:settingsPanel.Controls.Add($examplesInfo)
-    $examplesInfo.Add_Click({
-        [System.Windows.Forms.MessageBox]::Show(
-            "דוגמאות להזנת זמן:" + [Environment]::NewLine +
-            "10 = עשר דקות" + [Environment]::NewLine +
-            "3.4 = 3 דקות ו-40 שניות" + [Environment]::NewLine +
-            "3.45 = 3 דקות ו-45 שניות" + [Environment]::NewLine +
-            "3.59 = 3 דקות ו-59 שניות" + [Environment]::NewLine +
-            "3.6 = 3 דקות ו-36 שניות" + [Environment]::NewLine +
-            "3.75 = 3 דקות ו-45 שניות" + [Environment]::NewLine + [Environment]::NewLine +
-            "עד 0.59 הסיומת מפורשת כשניות; מעל 0.59 היא מפורשת כחלק יחסי של דקה.",
-            "דוגמאות להזנת זמן",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        ) | Out-Null
-    })
+    $script:infoToolTip.SetToolTip(
+        $examplesInfo,
+        "דוגמאות להזנת זמן:" + [Environment]::NewLine +
+        "10 = עשר דקות" + [Environment]::NewLine +
+        "3.4 = 3 דקות ו-40 שניות" + [Environment]::NewLine +
+        "3.45 = 3 דקות ו-45 שניות" + [Environment]::NewLine +
+        "3.59 = 3 דקות ו-59 שניות" + [Environment]::NewLine +
+        "3.6 = 3 דקות ו-36 שניות" + [Environment]::NewLine +
+        "3.75 = 3 דקות ו-45 שניות" + [Environment]::NewLine + [Environment]::NewLine +
+        "עד 0.59 הסיומת מפורשת כשניות; מעל 0.59 היא מפורשת כחלק יחסי של דקה."
+    )
 
     $actionLabel = New-Object System.Windows.Forms.Label
     $actionLabel.Text = "מה לבצע כשהטיימר מסתיים?"
@@ -465,9 +470,16 @@ public static class SleepTimerPower {
     $script:autoWakeCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $script:settingsPanel.Controls.Add($script:autoWakeCheck)
 
+    $script:loginPromptTopMostCheck = New-Object System.Windows.Forms.CheckBox
+    $script:loginPromptTopMostCheck.Text = "הצג חלון בחירת הזמן מעל כל החלונות בעת כניסה ל-Windows"
+    $script:loginPromptTopMostCheck.Location = New-Object System.Drawing.Point(20, 318)
+    $script:loginPromptTopMostCheck.Size = New-Object System.Drawing.Size(410, 24)
+    $script:loginPromptTopMostCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:settingsPanel.Controls.Add($script:loginPromptTopMostCheck)
+
     $autoPromptNote = New-Object System.Windows.Forms.Label
-    $autoPromptNote.Text = "הסימון נשמר מיד. סגירה ב-X או 'סגור ללא טיימר' אינה מבטלת זאת."
-    $autoPromptNote.Location = New-Object System.Drawing.Point(12, 318)
+    $autoPromptNote.Text = "הסימונים נשמרים מיד. אפשר להוריד את חלון הבחירה מתחת לחלונות אחרים."
+    $autoPromptNote.Location = New-Object System.Drawing.Point(12, 342)
     $autoPromptNote.Size = New-Object System.Drawing.Size(424, 22)
     $autoPromptNote.Font = New-Object System.Drawing.Font("Segoe UI", 8)
     $autoPromptNote.ForeColor = [System.Drawing.Color]::FromArgb(85, 95, 110)
@@ -476,70 +488,109 @@ public static class SleepTimerPower {
 
     $script:scheduleEnabledCheck = New-Object System.Windows.Forms.CheckBox
     $script:scheduleEnabledCheck.Text = "הפעל תזכורות יומיות בשעות שנבחרו"
-    $script:scheduleEnabledCheck.Location = New-Object System.Drawing.Point(20, 348)
+    $script:scheduleEnabledCheck.Location = New-Object System.Drawing.Point(20, 370)
     $script:scheduleEnabledCheck.Size = New-Object System.Drawing.Size(410, 25)
     $script:scheduleEnabledCheck.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
     $script:settingsPanel.Controls.Add($script:scheduleEnabledCheck)
 
     $scheduleTimeLabel = New-Object System.Windows.Forms.Label
     $scheduleTimeLabel.Text = "שעה:"
-    $scheduleTimeLabel.Location = New-Object System.Drawing.Point(290, 377)
+    $scheduleTimeLabel.Location = New-Object System.Drawing.Point(335, 397)
     $scheduleTimeLabel.Size = New-Object System.Drawing.Size(55, 26)
     $scheduleTimeLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $script:settingsPanel.Controls.Add($scheduleTimeLabel)
 
-    $script:scheduleTimePicker = New-Object System.Windows.Forms.DateTimePicker
-    $script:scheduleTimePicker.Format = [System.Windows.Forms.DateTimePickerFormat]::Custom
-    $script:scheduleTimePicker.CustomFormat = "HH:mm"
-    $script:scheduleTimePicker.RightToLeft = [System.Windows.Forms.RightToLeft]::No
-    $script:scheduleTimePicker.RightToLeftLayout = $false
-    $script:scheduleTimePicker.ShowUpDown = $true
-    $script:scheduleTimePicker.Value = (Get-Date).Date.AddHours(9)
-    $script:scheduleTimePicker.Location = New-Object System.Drawing.Point(205, 377)
-    $script:scheduleTimePicker.Size = New-Object System.Drawing.Size(80, 27)
-    $script:settingsPanel.Controls.Add($script:scheduleTimePicker)
+    # Separate numeric fields avoid the Windows time control's RTL display reversal.
+    $script:scheduleTimeInputPanel = New-Object System.Windows.Forms.Panel
+    $script:scheduleTimeInputPanel.Location = New-Object System.Drawing.Point(205, 397)
+    $script:scheduleTimeInputPanel.Size = New-Object System.Drawing.Size(122, 28)
+    $script:scheduleTimeInputPanel.RightToLeft = [System.Windows.Forms.RightToLeft]::No
+    $script:settingsPanel.Controls.Add($script:scheduleTimeInputPanel)
+
+    $script:scheduleHourPicker = New-Object System.Windows.Forms.NumericUpDown
+    $script:scheduleHourPicker.Minimum = 0
+    $script:scheduleHourPicker.Maximum = 23
+    $script:scheduleHourPicker.Value = 9
+    $script:scheduleHourPicker.DecimalPlaces = 0
+    $script:scheduleHourPicker.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
+    $script:scheduleHourPicker.RightToLeft = [System.Windows.Forms.RightToLeft]::No
+    $script:scheduleHourPicker.Location = New-Object System.Drawing.Point(0, 1)
+    $script:scheduleHourPicker.Size = New-Object System.Drawing.Size(48, 26)
+    $script:scheduleHourPicker.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:scheduleTimeInputPanel.Controls.Add($script:scheduleHourPicker)
+
+    $scheduleTimeSeparator = New-Object System.Windows.Forms.Label
+    $scheduleTimeSeparator.Text = ":"
+    $scheduleTimeSeparator.Location = New-Object System.Drawing.Point(49, 1)
+    $scheduleTimeSeparator.Size = New-Object System.Drawing.Size(12, 26)
+    $scheduleTimeSeparator.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+    $scheduleTimeSeparator.RightToLeft = [System.Windows.Forms.RightToLeft]::No
+    $scheduleTimeSeparator.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $script:scheduleTimeInputPanel.Controls.Add($scheduleTimeSeparator)
+
+    $script:scheduleMinutePicker = New-Object System.Windows.Forms.NumericUpDown
+    $script:scheduleMinutePicker.Minimum = 0
+    $script:scheduleMinutePicker.Maximum = 59
+    $script:scheduleMinutePicker.Value = 0
+    $script:scheduleMinutePicker.DecimalPlaces = 0
+    $script:scheduleMinutePicker.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
+    $script:scheduleMinutePicker.RightToLeft = [System.Windows.Forms.RightToLeft]::No
+    $script:scheduleMinutePicker.Location = New-Object System.Drawing.Point(63, 1)
+    $script:scheduleMinutePicker.Size = New-Object System.Drawing.Size(48, 26)
+    $script:scheduleMinutePicker.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $script:scheduleTimeInputPanel.Controls.Add($script:scheduleMinutePicker)
 
     $script:addScheduleButton = New-Object System.Windows.Forms.Button
     $script:addScheduleButton.Text = "הוסף שעה"
-    $script:addScheduleButton.Location = New-Object System.Drawing.Point(45, 376)
+    $script:addScheduleButton.Location = New-Object System.Drawing.Point(45, 396)
     $script:addScheduleButton.Size = New-Object System.Drawing.Size(145, 29)
     $script:settingsPanel.Controls.Add($script:addScheduleButton)
 
     $script:scheduleTimesList = New-Object System.Windows.Forms.ListBox
-    $script:scheduleTimesList.Location = New-Object System.Drawing.Point(230, 412)
-    $script:scheduleTimesList.Size = New-Object System.Drawing.Size(190, 62)
+    $script:scheduleTimesList.Location = New-Object System.Drawing.Point(230, 432)
+    $script:scheduleTimesList.Size = New-Object System.Drawing.Size(190, 52)
     $script:scheduleTimesList.Font = New-Object System.Drawing.Font("Segoe UI", 9)
     $script:settingsPanel.Controls.Add($script:scheduleTimesList)
 
     $script:removeScheduleButton = New-Object System.Windows.Forms.Button
     $script:removeScheduleButton.Text = "הסר שעה נבחרת"
-    $script:removeScheduleButton.Location = New-Object System.Drawing.Point(45, 420)
+    $script:removeScheduleButton.Location = New-Object System.Drawing.Point(45, 442)
     $script:removeScheduleButton.Size = New-Object System.Drawing.Size(165, 30)
     $script:settingsPanel.Controls.Add($script:removeScheduleButton)
 
     $scheduleInfo = New-Object System.Windows.Forms.Label
     $scheduleInfo.Text = "ⓘ"
-    $scheduleInfo.Location = New-Object System.Drawing.Point(410, 480)
+    $scheduleInfo.Location = New-Object System.Drawing.Point(410, 486)
     $scheduleInfo.Size = New-Object System.Drawing.Size(26, 26)
     $scheduleInfo.Font = New-Object System.Drawing.Font("Segoe UI Symbol", 17, [System.Drawing.FontStyle]::Bold)
     $scheduleInfo.ForeColor = [System.Drawing.Color]::FromArgb(35, 105, 175)
     $scheduleInfo.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
     $scheduleInfo.Cursor = [System.Windows.Forms.Cursors]::Hand
     $script:settingsPanel.Controls.Add($scheduleInfo)
-    $scheduleInfo.Add_Click({
-        [System.Windows.Forms.MessageBox]::Show(
-            "בכל שעה שנבחרה תופיע ספירה לאחור של דקה, עם אפשרות להוסיף 20 שניות." + [Environment]::NewLine + [Environment]::NewLine +
-            "אפשר ללחוץ על 'דלג הפעם' כדי לבטל רק את התזכורת הנוכחית; השעה תישאר שמורה לימים הבאים." + [Environment]::NewLine + [Environment]::NewLine +
-            "אם טיימר רגיל כבר פועל כשהשעה מגיעה, הוא מקבל עדיפות והתזכורת הקבועה תידלג.",
-            "מידע על תזכורות קבועות",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information
-        ) | Out-Null
+    $script:infoToolTip.SetToolTip(
+        $scheduleInfo,
+        "בכל שעה שנבחרה תופיע ספירה לאחור של דקה. חלון התזכורת יישאר מעל כל החלונות במשך כל הדקה, ואפשר להוסיף 20 שניות." + [Environment]::NewLine + [Environment]::NewLine +
+        "אפשר ללחוץ על 'דלג הפעם' כדי לבטל רק את התזכורת הנוכחית; השעה תישאר שמורה לימים הבאים." + [Environment]::NewLine + [Environment]::NewLine +
+        "אם טיימר רגיל כבר פועל כשהשעה מגיעה, הוא מקבל עדיפות והתזכורת הקבועה תידלג."
+    )
+
+    $script:lowerWindowButton = New-Object System.Windows.Forms.Button
+    $script:lowerWindowButton.Text = "העבר מתחת לחלונות"
+    $script:lowerWindowButton.Location = New-Object System.Drawing.Point(125, 486)
+    $script:lowerWindowButton.Size = New-Object System.Drawing.Size(175, 27)
+    $script:lowerWindowButton.Visible = $false
+    $script:lowerWindowButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+    $script:settingsPanel.Controls.Add($script:lowerWindowButton)
+    $script:lowerWindowButton.Add_Click({
+        $script:form.TopMost = $false
+        $script:lowerWindowButton.Visible = $false
+        $script:status.Text = "חלון בחירת הזמן הועבר מתחת לחלונות אחרים."
     })
 
     $savedAutoSettings = Read-AutoPromptSettings
     $script:autoLogonCheck.Checked = [bool]$savedAutoSettings.LaunchAtLogon
     $script:autoWakeCheck.Checked = [bool]$savedAutoSettings.LaunchOnWake
+    $script:loginPromptTopMostCheck.Checked = [bool]$savedAutoSettings.LoginPromptTopMost
     $script:scheduleRemindersEnabled = [bool]$savedAutoSettings.ScheduledRemindersEnabled
     $script:scheduledTimes = @($savedAutoSettings.ScheduledTimes)
     foreach ($time in $script:scheduledTimes) {
@@ -557,7 +608,7 @@ public static class SleepTimerPower {
             foreach ($item in $script:scheduleTimesList.Items) { $times += [string]$item }
             $script:scheduledTimes = @($times | Sort-Object -Unique)
             $script:scheduleRemindersEnabled = $script:scheduleEnabledCheck.Checked
-            Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked -scheduledRemindersEnabled $script:scheduleRemindersEnabled -scheduledTimes $script:scheduledTimes
+            Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked -loginPromptTopMost $script:loginPromptTopMostCheck.Checked -scheduledRemindersEnabled $script:scheduleRemindersEnabled -scheduledTimes $script:scheduledTimes
             $script:status.Text = "הגדרות הפתיחה והתזכורות נשמרו."
         }
         catch {
@@ -576,10 +627,11 @@ public static class SleepTimerPower {
 
     $script:autoLogonCheck.Add_CheckedChanged($autoOptionsChanged)
     $script:autoWakeCheck.Add_CheckedChanged($autoOptionsChanged)
+    $script:loginPromptTopMostCheck.Add_CheckedChanged($autoOptionsChanged)
     $script:scheduleEnabledCheck.Add_CheckedChanged($autoOptionsChanged)
 
     $script:addScheduleButton.Add_Click({
-        $newTime = $script:scheduleTimePicker.Value.ToString("HH:mm")
+        $newTime = ("{0:00}:{1:00}" -f [int]$script:scheduleHourPicker.Value, [int]$script:scheduleMinutePicker.Value)
         if (-not $script:scheduleTimesList.Items.Contains($newTime)) {
             [void]$script:scheduleTimesList.Items.Add($newTime)
             $sorted = @($script:scheduleTimesList.Items | ForEach-Object { [string]$_ } | Sort-Object -Unique)
@@ -615,7 +667,7 @@ public static class SleepTimerPower {
 
     $script:autoSettingsBusy = $true
     try {
-        Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked -scheduledRemindersEnabled $script:scheduleRemindersEnabled -scheduledTimes $script:scheduledTimes
+        Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked -loginPromptTopMost $script:loginPromptTopMostCheck.Checked -scheduledRemindersEnabled $script:scheduleRemindersEnabled -scheduledTimes $script:scheduledTimes
         $script:status.Text = "ההגדרות האוטומטיות פעילות לפי הסימונים."
     }
     catch {
@@ -642,6 +694,7 @@ public static class SleepTimerPower {
         $script:latePhase = $false
         $script:addButton.Enabled = $true
         $script:form.TopMost = $false
+        $script:lowerWindowButton.Visible = $false
 
         $script:form.MinimumSize = New-Object System.Drawing.Size(510, 710)
         $script:form.MaximumSize = New-Object System.Drawing.Size(510, 710)
@@ -690,9 +743,13 @@ public static class SleepTimerPower {
                 $script:latePhase = $true
             }
 
-            if ($script:latePhase) {
-                # After the end phase begins, one extension may raise the remaining time
-                # to at most 40 seconds. The next extension is enabled only at <=20 seconds.
+            if ($script:isScheduledReminder) {
+                # A fixed-time reminder must stay visible during its entire one-minute window.
+                $script:form.TopMost = $true
+                $script:addButton.Enabled = ($left -le 20)
+            }
+            elseif ($script:latePhase) {
+                # For regular timers, the existing preference applies only in the final phase.
                 $script:addButton.Enabled = ($left -le 20)
                 if ($script:topCheck.Checked) {
                     $script:form.TopMost = $true
@@ -809,7 +866,8 @@ public static class SleepTimerPower {
             $script:timerRunning = $true
             $script:addButton.Enabled = $true
             Update-DetailsLabel
-            $script:form.TopMost = $false
+            $script:form.TopMost = [bool]$script:isScheduledReminder
+            $script:lowerWindowButton.Visible = $false
             $script:countLabel.ForeColor = [System.Drawing.Color]::FromArgb(35, 70, 115)
             $script:countLabel.Text = Format-Remaining $seconds
             if ($script:isScheduledReminder) {
@@ -864,6 +922,11 @@ public static class SleepTimerPower {
             }
 
             $script:status.Text = "הטיימר פועל."
+            if ($script:isScheduledReminder) {
+                $script:form.TopMost = $true
+                $script:form.Activate()
+                $script:form.BringToFront()
+            }
             $script:clock.Start()
         }
         catch {
@@ -989,6 +1052,12 @@ $closeButton.Add_Click({ $script:form.Close() })
     # A scheduled task can start this process before the form is visible.
     # Begin the countdown from the Shown event so PerformClick is reliable.
     $script:form.Add_Shown({
+        if ($AutoLaunch -and -not $WakeLaunch -and $script:loginPromptTopMostCheck.Checked) {
+            $script:form.TopMost = $true
+            $script:lowerWindowButton.Visible = $true
+            $script:form.Activate()
+            $script:form.BringToFront()
+        }
         if ($script:autoReminderPending) {
             $script:autoReminderPending = $false
             Start-ScheduledReminder $script:autoReminderTime
