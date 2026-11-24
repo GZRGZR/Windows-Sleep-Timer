@@ -942,6 +942,8 @@ $closeButton.Add_Click({ $script:form.Close() })
 
     $script:scheduleWatcher.Start()
 
+    $script:autoReminderPending = $false
+    $script:autoReminderTime = $null
     if ($AutoReminder) {
         if (-not $script:scheduleRemindersEnabled -or $script:scheduledTimes -notcontains $ScheduledTime) { return }
         try {
@@ -949,10 +951,20 @@ $closeButton.Add_Click({ $script:form.Close() })
             $parts = $ScheduledTime.Split(':')
             $due = $now.Date.AddHours([int]$parts[0]).AddMinutes([int]$parts[1])
             if ($now -lt $due -or $now -ge $due.AddMinutes(1)) { return }
-            Start-ScheduledReminder $ScheduledTime
+            $script:autoReminderPending = $true
+            $script:autoReminderTime = $ScheduledTime
         }
         catch { return }
     }
+
+    # A scheduled task can start this process before the form is visible.
+    # Begin the countdown from the Shown event so PerformClick is reliable.
+    $script:form.Add_Shown({
+        if ($script:autoReminderPending) {
+            $script:autoReminderPending = $false
+            Start-ScheduledReminder $script:autoReminderTime
+        }
+    })
 
     [void]$script:form.ShowDialog()
 }
