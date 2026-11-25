@@ -909,9 +909,18 @@ public static class SleepTimerPower {
             $script:limitLabel.Location = New-Object System.Drawing.Point(10, 151)
             $script:limitLabel.Size = New-Object System.Drawing.Size(334, 22)
             if ($script:isScheduledReminder) {
+                # Keep the skip action available but visually secondary.
                 $script:cancelButton.Text = "דלג הפעם"
-                $script:cancelButton.Location = New-Object System.Drawing.Point(14, 112)
-                $script:cancelButton.Size = New-Object System.Drawing.Size(100, 35)
+                $script:cancelButton.Location = New-Object System.Drawing.Point(18, 117)
+                $script:cancelButton.Size = New-Object System.Drawing.Size(76, 25)
+                $script:cancelButton.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+                $script:cancelButton.ForeColor = [System.Drawing.Color]::FromArgb(110, 118, 128)
+                $script:cancelButton.BackColor = [System.Drawing.Color]::White
+                $script:cancelButton.UseVisualStyleBackColor = $false
+                $script:cancelButton.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+                $script:cancelButton.FlatAppearance.BorderSize = 0
+                $script:cancelButton.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::White
+                $script:cancelButton.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::Gainsboro
                 $script:cancelButton.Visible = $true
                 $script:addButton.Location = New-Object System.Drawing.Point(122, 112)
                 $script:addButton.Size = New-Object System.Drawing.Size(220, 35)
