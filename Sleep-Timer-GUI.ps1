@@ -209,6 +209,7 @@ public static class SleepTimerPower {
     $script:scheduledTimes = @()
     $script:scheduleRemindersEnabled = $false
     $script:handledScheduledPrompts = @{}
+    $script:scheduledPromptRetryAt = @{}
     $script:isScheduledReminder = $false
     $script:startingScheduledReminder = $false
 
@@ -986,6 +987,7 @@ public static class SleepTimerPower {
         $today = Get-Date
         $key = $today.ToString("yyyyMMdd") + "-" + $time.Replace(":", "")
         if ($script:handledScheduledPrompts.ContainsKey($key)) { return $false }
+        if ($script:scheduledPromptRetryAt.ContainsKey($key) -and (Get-Date) -lt $script:scheduledPromptRetryAt[$key]) { return $false }
 
         try {
             Write-ScheduleLog ("Attempting to open reminder | Time={0}" -f $time)
@@ -996,22 +998,23 @@ public static class SleepTimerPower {
 
             if ($script:timerRunning -and $script:isScheduledReminder) {
                 $script:handledScheduledPrompts[$key] = $true
+                $script:scheduledPromptRetryAt.Remove($key)
                 Write-ScheduleLog ("Reminder started successfully | Time={0}" -f $time)
                 return $true
             }
 
             $script:startingScheduledReminder = $false
             $script:isScheduledReminder = $false
-            $script:handledScheduledPrompts[$key] = $true
-            $script:status.Text = "לא הצלחתי לפתוח את התזכורת בשעה שנקבעה. בדוק את schedule.log."
-            Write-ScheduleLog ("ERROR: start button did not start the scheduled countdown | Time={0}" -f $time)
+            $script:scheduledPromptRetryAt[$key] = (Get-Date).AddSeconds(10)
+            $script:status.Text = "התזכורת לא נפתחה; התוכנה תנסה שוב. פרטים ב-schedule.log."
+            Write-ScheduleLog ("ERROR: start button did not start the scheduled countdown; retry in 10 seconds | Time={0}" -f $time)
             return $false
         }
         catch {
             $script:startingScheduledReminder = $false
-            $script:handledScheduledPrompts[$key] = $true
-            $script:status.Text = "שגיאה בפתיחת התזכורת. בדוק את schedule.log."
-            Write-ScheduleLog ("ERROR starting reminder | Time={0} | {1}" -f $time, $_.Exception.ToString())
+            $script:scheduledPromptRetryAt[$key] = (Get-Date).AddSeconds(10)
+            $script:status.Text = "שגיאה בפתיחת התזכורת; התוכנה תנסה שוב. פרטים ב-schedule.log."
+            Write-ScheduleLog ("ERROR starting reminder; retry in 10 seconds | Time={0} | {1}" -f $time, $_.Exception.ToString())
             return $false
         }
     }
