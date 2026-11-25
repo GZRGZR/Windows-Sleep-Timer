@@ -98,16 +98,18 @@ public static class SleepTimerPower {
         return $settings
     }
 
-    function script:Register-AutoPromptTask([string]$taskName, [string]$triggerXml, [string]$arguments = "-AutoLaunch") {
+    function script:Register-AutoPromptTask([string]$taskName, [string]$triggerXml, [string]$arguments = "-AutoLaunch", [switch]$Refresh = $false) {
         $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
         $scriptPathXml = [System.Security.SecurityElement]::Escape($script:scriptFilePath)
         $workingDirectoryXml = [System.Security.SecurityElement]::Escape((Split-Path -Parent $script:scriptFilePath))
+        $powerShellExe = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+        $powerShellExeXml = [System.Security.SecurityElement]::Escape($powerShellExe)
         $expectedArguments = '-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $script:scriptFilePath + '" ' + $arguments
         $argumentsXml = [System.Security.SecurityElement]::Escape($arguments)
         $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         if ($null -ne $existingTask) {
             $existingAction = $existingTask.Actions | Select-Object -First 1
-            if ($null -ne $existingAction -and $existingAction.Execute -ieq 'powershell.exe' -and $existingAction.Arguments -eq $expectedArguments) {
+            if ($null -ne $existingAction -and $existingAction.Execute -ieq $powerShellExe -and $existingAction.Arguments -eq $expectedArguments -and -not $Refresh) {
                 Write-ScheduleLog ("Task already registered with expected action | {0}" -f $taskName)
                 return
             }
@@ -128,7 +130,7 @@ public static class SleepTimerPower {
     <Enabled>true</Enabled><Hidden>false</Hidden><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority>
   </Settings>
   <Actions Context="Author">
-    <Exec><Command>powershell.exe</Command>
+    <Exec><Command>$powerShellExeXml</Command>
       <Arguments>-NoLogo -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File &quot;$scriptPathXml&quot; $argumentsXml</Arguments>
       <WorkingDirectory>$workingDirectoryXml</WorkingDirectory>
     </Exec>
@@ -176,7 +178,7 @@ public static class SleepTimerPower {
                 $startBoundary = (Get-Date).Date.AddHours([int]$parts[0]).AddMinutes([int]$parts[1]).ToString("yyyy-MM-ddTHH:mm:ss", [Globalization.CultureInfo]::InvariantCulture)
                 $dailyTrigger = '<CalendarTrigger><StartBoundary>' + $startBoundary + '</StartBoundary><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>'
                 Write-ScheduleLog ("Register daily reminder | Time={0} | StartBoundary={1} | Enabled={2}" -f $time, $startBoundary, $scheduledRemindersEnabled)
-                Register-AutoPromptTask -taskName $taskName -triggerXml $dailyTrigger -arguments ("-AutoReminder -ScheduledTime " + $time)
+                Register-AutoPromptTask -taskName $taskName -triggerXml $dailyTrigger -arguments ("-AutoReminder -ScheduledTime " + $time) -Refresh
             }
         }
         Get-ScheduledTask -ErrorAction SilentlyContinue |
