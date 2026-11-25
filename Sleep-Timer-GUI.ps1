@@ -1,14 +1,33 @@
 ﻿param([switch]$AutoLaunch, [switch]$AutoReminder, [string]$ScheduledTime, [switch]$WakeLaunch)
 $ErrorActionPreference = 'Stop'
 
+$script:scheduleLogPath = Join-Path $env:LOCALAPPDATA "WindowsSleepTimer\schedule.log"
+function script:Write-ScheduleLog([string]$message) {
+    try {
+        $logFolder = Split-Path -Parent $script:scheduleLogPath
+        if (-not (Test-Path -LiteralPath $logFolder)) {
+            New-Item -ItemType Directory -Path $logFolder -Force | Out-Null
+        }
+        $line = (Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff") + " | " + $message
+        Add-Content -LiteralPath $script:scheduleLogPath -Value $line -Encoding UTF8
+    }
+    catch { }
+}
+
 try {
+    Write-ScheduleLog ("Process start | AutoReminder={0} | ScheduledTime={1} | AutoLaunch={2} | WakeLaunch={3}" -f $AutoReminder, $ScheduledTime, $AutoLaunch, $WakeLaunch)
     Add-Type -AssemblyName System.Windows.Forms
     $script:scriptFilePath = $PSCommandPath
     $script:mutexOwned = $false
     $script:singleInstanceMutex = New-Object System.Threading.Mutex($false, "Local\WindowsSleepTimerSingleInstance")
     try { $script:mutexOwned = $script:singleInstanceMutex.WaitOne(0, $false) }
     catch [System.Threading.AbandonedMutexException] { $script:mutexOwned = $true }
-    if (-not $script:mutexOwned) { return }
+    if (-not $script:mutexOwned) {
+        if ($AutoReminder) {
+            Write-ScheduleLog "Scheduled task reached the app, but another instance owns the main window mutex. Existing instance should handle the reminder."
+        }
+        return
+    }
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
 
@@ -88,7 +107,10 @@ public static class SleepTimerPower {
         $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         if ($null -ne $existingTask) {
             $existingAction = $existingTask.Actions | Select-Object -First 1
-            if ($null -ne $existingAction -and $existingAction.Execute -ieq 'powershell.exe' -and $existingAction.Arguments -eq $expectedArguments) { return }
+            if ($null -ne $existingAction -and $existingAction.Execute -ieq 'powershell.exe' -and $existingAction.Arguments -eq $expectedArguments) {
+                Write-ScheduleLog ("Task already registered with expected action | {0}" -f $taskName)
+                return
+            }
         }
         $taskXml = @"
 <?xml version="1.0" encoding="UTF-16"?>
@@ -114,6 +136,9 @@ public static class SleepTimerPower {
 </Task>
 "@
         Register-ScheduledTask -TaskName $taskName -Xml $taskXml -Force -ErrorAction Stop | Out-Null
+        $registeredTask = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+        $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction Stop
+        Write-ScheduleLog ("Task registered | {0} | State={1} | NextRun={2}" -f $taskName, $registeredTask.State, $taskInfo.NextRunTime)
     }
 
     function script:Remove-AutoPromptTask([string]$taskName) {
@@ -150,6 +175,7 @@ public static class SleepTimerPower {
                 $desiredReminderTasks[$taskName] = $true
                 $startBoundary = (Get-Date).Date.AddHours([int]$parts[0]).AddMinutes([int]$parts[1]).ToString("yyyy-MM-ddTHH:mm:ss", [Globalization.CultureInfo]::InvariantCulture)
                 $dailyTrigger = '<CalendarTrigger><StartBoundary>' + $startBoundary + '</StartBoundary><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>'
+                Write-ScheduleLog ("Register daily reminder | Time={0} | StartBoundary={1} | Enabled={2}" -f $time, $startBoundary, $scheduledRemindersEnabled)
                 Register-AutoPromptTask -taskName $taskName -triggerXml $dailyTrigger -arguments ("-AutoReminder -ScheduledTime " + $time)
             }
         }
@@ -164,6 +190,7 @@ public static class SleepTimerPower {
             ScheduledRemindersEnabled = $scheduledRemindersEnabled
             ScheduledTimes = $validTimes
         } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $script:autoSettingsPath -Encoding UTF8
+        Write-ScheduleLog ("Settings saved | Enabled={0} | Times={1}" -f $scheduledRemindersEnabled, ($validTimes -join ","))
     }
 
     # State and controls are script-scoped so the event callbacks always see them.
@@ -950,14 +977,41 @@ public static class SleepTimerPower {
     })
 
     function script:Start-ScheduledReminder([string]$time) {
-        if ($script:timerRunning) { return }
+        if ($script:timerRunning) {
+            Write-ScheduleLog ("Reminder skipped because another timer is active | Time={0}" -f $time)
+            return $false
+        }
         $today = Get-Date
         $key = $today.ToString("yyyyMMdd") + "-" + $time.Replace(":", "")
-        if ($script:handledScheduledPrompts.ContainsKey($key)) { return }
-        $script:handledScheduledPrompts[$key] = $true
-        $script:startingScheduledReminder = $true
-        $script:timeBox.Text = "1"
-        $script:startButton.PerformClick()
+        if ($script:handledScheduledPrompts.ContainsKey($key)) { return $false }
+
+        try {
+            Write-ScheduleLog ("Attempting to open reminder | Time={0}" -f $time)
+            $script:startingScheduledReminder = $true
+            $script:timeBox.Text = "1"
+            [System.Windows.Forms.Application]::DoEvents()
+            $script:startButton.PerformClick()
+
+            if ($script:timerRunning -and $script:isScheduledReminder) {
+                $script:handledScheduledPrompts[$key] = $true
+                Write-ScheduleLog ("Reminder started successfully | Time={0}" -f $time)
+                return $true
+            }
+
+            $script:startingScheduledReminder = $false
+            $script:isScheduledReminder = $false
+            $script:handledScheduledPrompts[$key] = $true
+            $script:status.Text = "לא הצלחתי לפתוח את התזכורת בשעה שנקבעה. בדוק את schedule.log."
+            Write-ScheduleLog ("ERROR: start button did not start the scheduled countdown | Time={0}" -f $time)
+            return $false
+        }
+        catch {
+            $script:startingScheduledReminder = $false
+            $script:handledScheduledPrompts[$key] = $true
+            $script:status.Text = "שגיאה בפתיחת התזכורת. בדוק את schedule.log."
+            Write-ScheduleLog ("ERROR starting reminder | Time={0} | {1}" -f $time, $_.Exception.ToString())
+            return $false
+        }
     }
 
     $script:scheduleWatcher = New-Object System.Windows.Forms.Timer
@@ -971,17 +1025,21 @@ public static class SleepTimerPower {
                 $due = $now.Date.AddHours([int]$parts[0]).AddMinutes([int]$parts[1])
                 $key = $due.ToString("yyyyMMdd") + "-" + $time.Replace(":", "")
                 if ($script:handledScheduledPrompts.ContainsKey($key)) { continue }
-                if ($now -ge $due -and $now -lt $due.AddMinutes(1)) {
+                if ($now -ge $due -and $now -lt $due.AddMinutes(5)) {
                     if ($script:timerRunning) {
                         # An existing timer takes priority; skip this scheduled occurrence.
                         $script:handledScheduledPrompts[$key] = $true
+                        Write-ScheduleLog ("Scheduled occurrence skipped; regular timer has priority | Time={0}" -f $time)
                         continue
                     }
-                    Start-ScheduledReminder $time
+                    [void](Start-ScheduledReminder $time)
                     return
                 }
             }
-            catch { }
+            catch {
+                Write-ScheduleLog ("ERROR in schedule watcher | Time={0} | {1}" -f $time, $_.Exception.ToString())
+                $script:status.Text = "שגיאה בבדיקת תזכורות. בדוק את schedule.log."
+            }
         }
     })
 
@@ -1047,16 +1105,34 @@ $closeButton.Add_Click({ $script:form.Close() })
     $script:autoReminderPending = $false
     $script:autoReminderTime = $null
     if ($AutoReminder) {
-        if (-not $script:scheduleRemindersEnabled -or $script:scheduledTimes -notcontains $ScheduledTime) { return }
+        if (-not $script:scheduleRemindersEnabled) {
+            Write-ScheduleLog "Scheduled task ignored: daily reminders are disabled in saved settings."
+            return
+        }
+        if ($script:scheduledTimes -notcontains $ScheduledTime) {
+            Write-ScheduleLog ("Scheduled task ignored: time is not in saved list | Requested={0} | Saved={1}" -f $ScheduledTime, ($script:scheduledTimes -join ","))
+            return
+        }
         try {
             $now = Get-Date
             $parts = $ScheduledTime.Split(':')
             $due = $now.Date.AddHours([int]$parts[0]).AddMinutes([int]$parts[1])
-            if ($now -lt $due -or $now -ge $due.AddMinutes(1)) { return }
+            if ($now -lt $due) {
+                Write-ScheduleLog ("Scheduled task started before its due time; ignoring | Time={0}" -f $ScheduledTime)
+                return
+            }
+            if ($now -ge $due.AddMinutes(5)) {
+                Write-ScheduleLog ("Scheduled task started too late; ignoring | Time={0} | Now={1}" -f $ScheduledTime, $now)
+                return
+            }
             $script:autoReminderPending = $true
             $script:autoReminderTime = $ScheduledTime
+            Write-ScheduleLog ("Scheduled reminder accepted for launch | Time={0}" -f $ScheduledTime)
         }
-        catch { return }
+        catch {
+            Write-ScheduleLog ("ERROR validating scheduled task parameters | {0}" -f $_.Exception.ToString())
+            return
+        }
     }
 
     # A scheduled task can start this process before the form is visible.
@@ -1070,13 +1146,15 @@ $closeButton.Add_Click({ $script:form.Close() })
         }
         if ($script:autoReminderPending) {
             $script:autoReminderPending = $false
-            Start-ScheduledReminder $script:autoReminderTime
+            [void](Start-ScheduledReminder $script:autoReminderTime)
+            Write-ScheduleLog ("Shown event processed pending reminder | Time={0}" -f $script:autoReminderTime)
         }
     })
 
     [void]$script:form.ShowDialog()
 }
 catch {
+    Write-ScheduleLog ("FATAL startup error | {0}" -f $_.Exception.ToString())
     try {
         Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
         [System.Windows.Forms.MessageBox]::Show(
