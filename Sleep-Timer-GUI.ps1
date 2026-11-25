@@ -696,22 +696,30 @@ public static class SleepTimerPower {
         }
     })
 
-    $script:autoSettingsBusy = $true
-    try {
-        Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked -loginPromptTopMost $script:loginPromptTopMostCheck.Checked -scheduledRemindersEnabled $script:scheduleRemindersEnabled -scheduledTimes $script:scheduledTimes
-        $script:status.Text = "ההגדרות האוטומטיות פעילות לפי הסימונים."
+    if (-not $AutoReminder) {
+        $script:autoSettingsBusy = $true
+        try {
+            Apply-AutoPromptSettings -launchAtLogon $script:autoLogonCheck.Checked -launchOnWake $script:autoWakeCheck.Checked -loginPromptTopMost $script:loginPromptTopMostCheck.Checked -scheduledRemindersEnabled $script:scheduleRemindersEnabled -scheduledTimes $script:scheduledTimes
+            $script:status.Text = "ההגדרות האוטומטיות פעילות לפי הסימונים."
+        }
+        catch {
+            $script:status.Text = "לא ניתן להגדיר חלק מהפעולות האוטומטיות; ניתן להשתמש בטיימר כרגיל."
+            Write-ScheduleLog ("ERROR applying automatic settings | {0}" -f $_.Exception.ToString())
+            [System.Windows.Forms.MessageBox]::Show(
+                "Windows לא הצליח לרשום את משימות התזמון. אפשר להמשיך להשתמש בטיימר כרגיל." + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message,
+                "הגדרות אוטומטיות",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Warning
+            ) | Out-Null
+        }
+        finally {
+            $script:autoSettingsBusy = $false
+        }
     }
-    catch {
-        $script:status.Text = "לא ניתן להגדיר חלק מהפעולות האוטומטיות; ניתן להשתמש בטיימר כרגיל."
-        [System.Windows.Forms.MessageBox]::Show(
-            "Windows לא הצליח לרשום את משימות התזמון. אפשר להמשיך להשתמש בטיימר כרגיל." + [Environment]::NewLine + [Environment]::NewLine + $_.Exception.Message,
-            "הגדרות אוטומטיות",
-            [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Warning
-        ) | Out-Null
-    }
-    finally {
-        $script:autoSettingsBusy = $false
+    else {
+        # A reminder task must not try to re-register the task that is currently running.
+        $script:status.Text = "תזכורת יומית מתוזמנת."
+        Write-ScheduleLog "Skipped task registration during scheduled reminder launch."
     }
 
     function script:Update-DetailsLabel {
